@@ -14,7 +14,12 @@
       "backgroundColor": "#991c1c"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.oluanmedrado.riffmaker",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "O Riff Maker precisa acessar o microfone para gravar seus riffs de guitarra."
+      }
     },
     "android": {
       "permissions": ["RECORD_AUDIO"],
@@ -24,7 +29,8 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.oluanmedrado.riffmaker"
+      "package": "com.oluanmedrado.riffmaker",
+      "versionCode": 1
     },
     "web": {
       "bundler": "metro",
@@ -34,6 +40,11 @@
     "plugins": ["expo-router"],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "your-project-id"
+      }
     }
   }
 }

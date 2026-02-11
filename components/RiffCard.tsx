@@ -1,6 +1,6 @@
 import { Riff } from "@/src/types/riff";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import {
   Animated,
   Pressable,
@@ -21,7 +21,7 @@ type Props = {
   onPress: () => void;
 };
 
-export function RiffCard({
+export const RiffCard = memo(function RiffCard({
   riff,
   onDelete,
   onDuplicate,
@@ -45,7 +45,7 @@ export function RiffCard({
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [opacity, translateY]);
 
   function renderRightActions() {
     return (
@@ -162,7 +162,7 @@ export function RiffCard({
       </Animated.View>
     </Swipeable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {
