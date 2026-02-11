@@ -6,6 +6,7 @@ export type Riff = {
   audioUri?: string;
   createdAt: number;
   updatedAt?: number;
+  favorite?: boolean;
 
   tuning?: {
     type: "preset" | "custom";

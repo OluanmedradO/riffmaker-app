@@ -1,16 +1,34 @@
 import { Riff } from "@/src/types/riff";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useEffect, useRef } from "react";
-import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Animated,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  Alert,
+} from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
-import { darkTheme } from "./Theme";
+import { useTheme } from "./ThemeProvider";
+import { formatDate } from "@/src/utils/formatters";
+
 type Props = {
   riff: Riff;
   onDelete: (id: string) => void;
+  onDuplicate?: (id: string) => void;
+  onToggleFavorite?: (id: string) => void;
   onPress: () => void;
 };
 
-export function RiffCard({ riff, onDelete, onPress }: Props) {
+export function RiffCard({
+  riff,
+  onDelete,
+  onDuplicate,
+  onToggleFavorite,
+  onPress,
+}: Props) {
+  const theme = useTheme();
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(10)).current;
 
@@ -31,18 +49,23 @@ export function RiffCard({ riff, onDelete, onPress }: Props) {
 
   function renderRightActions() {
     return (
-      <Pressable onPress={() => onDelete(riff.id)} style={styles.delete}>
-        <FontAwesome name="trash" size={20} color="#fff" />
-      </Pressable>
+      <View style={styles.actionsContainer}>
+        {onDuplicate && (
+          <Pressable
+            onPress={() => onDuplicate(riff.id)}
+            style={[styles.action, { backgroundColor: "#3b82f6" }]}
+          >
+            <FontAwesome name="copy" size={20} color="#fff" />
+          </Pressable>
+        )}
+        <Pressable
+          onPress={() => onDelete(riff.id)}
+          style={[styles.action, { backgroundColor: theme.destructive }]}
+        >
+          <FontAwesome name="trash" size={20} color="#fff" />
+        </Pressable>
+      </View>
     );
-  }
-
-  function formatDate(timestamp: number) {
-    return new Date(timestamp).toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
   }
 
   return (
@@ -57,35 +80,83 @@ export function RiffCard({ riff, onDelete, onPress }: Props) {
           onPress={onPress}
           style={({ pressed }) => [
             styles.card,
-            { opacity: pressed ? 0.85 : 1 },
+            {
+              backgroundColor: theme.card,
+              opacity: pressed ? 0.85 : 1,
+              shadowColor: "#000",
+              shadowOpacity: 0.1,
+              shadowRadius: 6,
+              shadowOffset: { width: 0, height: 2 },
+              elevation: 3,
+            },
           ]}
         >
-          <Text style={styles.title}>{riff.title}</Text>
+          <View style={styles.header}>
+            <Text style={[styles.title, { color: theme.primary }]}>
+              {riff.title}
+            </Text>
+            {onToggleFavorite && (
+              <Pressable
+                onPress={() => onToggleFavorite(riff.id)}
+                hitSlop={8}
+              >
+                <FontAwesome
+                  name={riff.favorite ? "star" : "star-o"}
+                  size={20}
+                  color={riff.favorite ? "#fbbf24" : theme.mutedForeground}
+                />
+              </Pressable>
+            )}
+          </View>
 
           <View style={styles.metaRow}>
-            <Text style={styles.metaText}>
-              {riff.tuning?.value || "Afinação —"}
-            </Text>
+            <View style={styles.metaItem}>
+              <FontAwesome
+                name="music"
+                size={12}
+                color={theme.mutedForeground}
+              />
+              <Text style={[styles.metaText, { color: theme.mutedForeground }]}>
+                {riff.tuning?.value || "—"}
+              </Text>
+            </View>
 
-            <Text style={styles.metaText}>
-              {riff.bpm ? (
-                <>
-                  {riff.bpm} <Text style={{ opacity: 0.6 }}>BPM</Text>
-                </>
-              ) : (
-                "BPM —"
-              )}
-            </Text>
+            <View style={styles.metaItem}>
+              <FontAwesome
+                name="tachometer"
+                size={12}
+                color={theme.mutedForeground}
+              />
+              <Text style={[styles.metaText, { color: theme.mutedForeground }]}>
+                {riff.bpm ? `${riff.bpm} BPM` : "—"}
+              </Text>
+            </View>
+
+            {riff.audioUri && (
+              <View style={styles.metaItem}>
+                <FontAwesome
+                  name="microphone"
+                  size={12}
+                  color={theme.primary}
+                />
+                <Text style={[styles.metaText, { color: theme.primary }]}>
+                  Áudio
+                </Text>
+              </View>
+            )}
           </View>
 
           {riff.notes ? (
-            <Text style={styles.notes} numberOfLines={2}>
+            <Text
+              style={[styles.notes, { color: theme.foreground }]}
+              numberOfLines={2}
+            >
               {riff.notes}
             </Text>
           ) : null}
 
-          <Text style={styles.date}>
-            Criado em {formatDate(riff.createdAt)}
+          <Text style={[styles.date, { color: theme.mutedForeground }]}>
+            {formatDate(riff.createdAt)}
           </Text>
         </Pressable>
       </Animated.View>
@@ -95,40 +166,48 @@ export function RiffCard({ riff, onDelete, onPress }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: darkTheme.card,
     padding: 16,
     borderRadius: 12,
     marginBottom: 12,
   },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
   title: {
-    color: darkTheme.primary,
     fontSize: 16,
     fontWeight: "bold",
-    marginBottom: 6,
+    flex: 1,
   },
   metaRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 4,
+    gap: 12,
+    marginBottom: 8,
   },
-
+  metaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
   metaText: {
-    color: darkTheme.mutedForeground,
     fontSize: 12,
   },
   notes: {
-    color: darkTheme.foreground,
     fontSize: 13,
-  },
-  delete: {
-    backgroundColor: darkTheme.primary,
-    justifyContent: "center",
-    alignItems: "center",
-    width: 72,
+    marginBottom: 8,
+    lineHeight: 18,
   },
   date: {
     fontSize: 11,
-    color: darkTheme.mutedForeground,
-    paddingTop: 8,
+  },
+  actionsContainer: {
+    flexDirection: "row",
+  },
+  action: {
+    justifyContent: "center",
+    alignItems: "center",
+    width: 72,
   },
 });
