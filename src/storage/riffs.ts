@@ -51,7 +51,7 @@ export async function duplicateRiff(id: string): Promise<Riff | null> {
 
   const duplicate: Riff = {
     ...original,
-    id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    id: `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
     title: `${original.title} (cópia)`,
     createdAt: Date.now(),
     updatedAt: Date.now(),
