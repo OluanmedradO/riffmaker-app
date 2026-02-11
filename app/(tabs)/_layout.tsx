@@ -1,32 +1,27 @@
+import { useTheme } from "@/components/ThemeProvider";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Tabs } from "expo-router";
 
-export default function TabLayout() {
+export default function TabsLayout() {
+  const theme = useTheme();
   return (
     <Tabs
       screenOptions={{
-        headerShown: true,
-        tabBarActiveTintColor: "#7c3aed",
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: theme.background,
+          borderTopColor: theme.border,
+        },
+        tabBarActiveTintColor: theme.primary,
+        tabBarInactiveTintColor: theme.mutedForeground,
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: "Riff Maker",
-          tabBarLabel: "Riffs",
+          title: "Riffs",
           tabBarIcon: ({ color }) => (
-            <FontAwesome name="music" size={24} color={color} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="create"
-        options={{
-          title: "Novo Riff",
-          tabBarLabel: "Criar",
-          tabBarIcon: ({ color }) => (
-            <FontAwesome name="plus-circle" size={24} color={color} />
+            <FontAwesome name="music" size={20} color={color} />
           ),
         }}
       />

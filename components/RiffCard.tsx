@@ -3,7 +3,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
-
+import { darkTheme } from "./Theme";
 type Props = {
   riff: Riff;
   onDelete: (id: string) => void;
@@ -37,6 +37,14 @@ export function RiffCard({ riff, onDelete, onPress }: Props) {
     );
   }
 
+  function formatDate(timestamp: number) {
+    return new Date(timestamp).toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  }
+
   return (
     <Swipeable renderRightActions={renderRightActions}>
       <Animated.View
@@ -54,10 +62,19 @@ export function RiffCard({ riff, onDelete, onPress }: Props) {
         >
           <Text style={styles.title}>{riff.title}</Text>
 
-          <View style={styles.meta}>
-            <Text style={styles.metaText}>{riff.tuning || "Afinação —"}</Text>
+          <View style={styles.metaRow}>
             <Text style={styles.metaText}>
-              {riff.bpm ? `${riff.bpm} BPM` : "BPM —"}
+              {riff.tuning?.value || "Afinação —"}
+            </Text>
+
+            <Text style={styles.metaText}>
+              {riff.bpm ? (
+                <>
+                  {riff.bpm} <Text style={{ opacity: 0.6 }}>BPM</Text>
+                </>
+              ) : (
+                "BPM —"
+              )}
             </Text>
           </View>
 
@@ -66,6 +83,10 @@ export function RiffCard({ riff, onDelete, onPress }: Props) {
               {riff.notes}
             </Text>
           ) : null}
+
+          <Text style={styles.date}>
+            Criado em {formatDate(riff.createdAt)}
+          </Text>
         </Pressable>
       </Animated.View>
     </Swipeable>
@@ -74,34 +95,40 @@ export function RiffCard({ riff, onDelete, onPress }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#111827",
+    backgroundColor: darkTheme.card,
     padding: 16,
     borderRadius: 12,
     marginBottom: 12,
   },
   title: {
-    color: "#fff",
+    color: darkTheme.primary,
     fontSize: 16,
     fontWeight: "bold",
     marginBottom: 6,
   },
-  meta: {
+  metaRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 6,
+    marginBottom: 4,
   },
+
   metaText: {
-    color: "#9ca3af",
+    color: darkTheme.mutedForeground,
     fontSize: 12,
   },
   notes: {
-    color: "#d1d5db",
+    color: darkTheme.foreground,
     fontSize: 13,
   },
   delete: {
-    backgroundColor: "#dc2626",
+    backgroundColor: darkTheme.primary,
     justifyContent: "center",
     alignItems: "center",
     width: 72,
+  },
+  date: {
+    fontSize: 11,
+    color: darkTheme.mutedForeground,
+    paddingTop: 8,
   },
 });
