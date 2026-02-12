@@ -25,6 +25,15 @@ export default function TabsLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: "Configurações",
+          tabBarIcon: ({ color }) => (
+            <FontAwesome name="cog" size={20} color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }

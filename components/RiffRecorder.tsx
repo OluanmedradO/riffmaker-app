@@ -1,15 +1,21 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Audio } from "expo-av";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View, Alert } from "react-native";
+import { useTheme } from "./ThemeProvider";
+import { useHaptic } from "@/src/hooks/useHaptic";
+import { formatTime } from "@/src/utils/formatters";
 
 type Props = {
   audioUri?: string;
   onChange: (uri?: string) => void;
-  maxSeconds?: number; // opcional (ex: 60)
+  maxSeconds?: number;
 };
 
 export function RiffRecorder({ audioUri, onChange, maxSeconds = 60 }: Props) {
+  const theme = useTheme();
+  const { triggerHaptic } = useHaptic();
+
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -24,19 +30,15 @@ export function RiffRecorder({ audioUri, onChange, maxSeconds = 60 }: Props) {
     };
   }, [sound]);
 
-  function formatTime(total: number) {
-    const m = Math.floor(total / 60)
-      .toString()
-      .padStart(2, "0");
-    const s = (total % 60).toString().padStart(2, "0");
-    return `${m}:${s}`;
-  }
-
   async function startRecording() {
     try {
       const permission = await Audio.requestPermissionsAsync();
       if (!permission.granted) {
-        alert("Permissão de microfone é necessária para gravar.");
+        Alert.alert(
+          "Permissão necessária",
+          "O Riff Maker precisa acessar o microfone para gravar áudio. Por favor, permita o acesso nas configurações.",
+          [{ text: "OK" }],
+        );
         return;
       }
 
@@ -53,6 +55,7 @@ export function RiffRecorder({ audioUri, onChange, maxSeconds = 60 }: Props) {
 
       setRecording(rec);
       setSeconds(0);
+      triggerHaptic("medium");
 
       timerRef.current = setInterval(() => {
         setSeconds((prev) => {
@@ -65,7 +68,11 @@ export function RiffRecorder({ audioUri, onChange, maxSeconds = 60 }: Props) {
       }, 1000);
     } catch (error) {
       console.error("Erro ao iniciar gravação:", error);
-      alert("Erro ao iniciar gravação de áudio.");
+      Alert.alert(
+        "Erro",
+        "Não foi possível iniciar a gravação. Tente novamente.",
+      );
+      triggerHaptic("error");
     }
   }
 
@@ -82,70 +89,114 @@ export function RiffRecorder({ audioUri, onChange, maxSeconds = 60 }: Props) {
       const uri = recording.getURI();
 
       if (!uri) {
-        alert("Erro ao salvar gravação.");
+        Alert.alert("Erro", "Não foi possível salvar a gravação.");
+        triggerHaptic("error");
         return;
       }
 
       setRecording(null);
       onChange(uri);
+      triggerHaptic("success");
     } catch (error) {
       console.error("Erro ao parar gravação:", error);
-      alert("Erro ao finalizar gravação.");
+      Alert.alert("Erro", "Não foi possível finalizar a gravação.");
+      triggerHaptic("error");
     }
   }
 
   async function playAudio() {
     if (!audioUri) return;
 
-    const { sound } = await Audio.Sound.createAsync(
-      { uri: audioUri },
-      { shouldPlay: true },
+    try {
+      triggerHaptic("light");
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: audioUri },
+        { shouldPlay: true },
+      );
+
+      setSound(newSound);
+      setIsPlaying(true);
+
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (!status.isLoaded) return;
+        if (!status.isPlaying) {
+          setIsPlaying(false);
+          newSound.unloadAsync();
+        }
+      });
+    } catch (error) {
+      console.error("Erro ao reproduzir áudio:", error);
+      Alert.alert("Erro", "Não foi possível reproduzir o áudio.");
+      triggerHaptic("error");
+    }
+  }
+
+  async function handleDelete() {
+    Alert.alert(
+      "Apagar gravação?",
+      "Esta ação não pode ser desfeita.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Apagar",
+          style: "destructive",
+          onPress: () => {
+            onChange(undefined);
+            triggerHaptic("medium");
+          },
+        },
+      ],
     );
-
-    setSound(sound);
-    setIsPlaying(true);
-
-    sound.setOnPlaybackStatusUpdate((status) => {
-      if (!status.isLoaded) return;
-      if (!status.isPlaying) {
-        setIsPlaying(false);
-        sound.unloadAsync();
-      }
-    });
   }
 
   return (
     <View style={styles.container}>
       {!recording ? (
-        <Pressable style={styles.button} onPress={startRecording}>
+        <Pressable
+          style={[
+            styles.button,
+            { backgroundColor: theme.primary },
+          ]}
+          onPress={startRecording}
+        >
           <FontAwesome name="microphone" size={20} color="#fff" />
-          <Text style={styles.text}>Gravar</Text>
+          <Text style={styles.text}>
+            {audioUri ? "Gravar novamente" : "Gravar áudio"}
+          </Text>
         </Pressable>
       ) : (
         <Pressable
           style={[styles.button, styles.recording]}
           onPress={stopRecording}
         >
-          <FontAwesome name="stop" size={20} color="#fff" />
+          <View style={styles.recordingIndicator} />
           <Text style={styles.text}>Gravando {formatTime(seconds)}</Text>
+          <FontAwesome name="stop" size={20} color="#fff" />
         </Pressable>
       )}
 
-      {audioUri && (
+      {audioUri && !recording && (
         <View style={styles.row}>
-          <Pressable style={styles.small} onPress={playAudio}>
+          <Pressable
+            style={[styles.small, { backgroundColor: theme.secondary }]}
+            onPress={playAudio}
+          >
             <FontAwesome
               name={isPlaying ? "pause" : "play"}
               size={16}
               color="#fff"
             />
+            <Text style={styles.smallText}>
+              {isPlaying ? "Pausar" : "Tocar"}
+            </Text>
           </Pressable>
 
           <Pressable
-            style={[styles.small, styles.delete]}
-            onPress={() => onChange(undefined)}
+            style={[styles.small, { backgroundColor: theme.destructive }]}
+            onPress={handleDelete}
           >
             <FontAwesome name="trash" size={16} color="#fff" />
+            <Text style={styles.smallText}>Apagar</Text>
           </Pressable>
         </View>
       )}
@@ -161,8 +212,7 @@ const styles = StyleSheet.create({
   button: {
     flexDirection: "row",
     gap: 8,
-    backgroundColor: "#991c1c",
-    padding: 12,
+    padding: 14,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
@@ -170,21 +220,34 @@ const styles = StyleSheet.create({
   recording: {
     backgroundColor: "#dc2626",
   },
+  recordingIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#fff",
+  },
   text: {
     color: "#fff",
-    fontWeight: "bold",
+    fontWeight: "600",
+    fontSize: 15,
   },
   row: {
     flexDirection: "row",
-    gap: 12,
+    gap: 8,
     justifyContent: "center",
   },
   small: {
-    padding: 10,
+    flex: 1,
+    flexDirection: "row",
+    gap: 6,
+    padding: 12,
     borderRadius: 8,
-    backgroundColor: "#374151",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  delete: {
-    backgroundColor: "#7f1d1d",
+  smallText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 13,
   },
 });
