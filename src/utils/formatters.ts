@@ -1,9 +1,20 @@
+import { TUNING_PRESETS } from "../constants/app";
+
 export function formatTime(totalSeconds: number): string {
-  const minutes = Math.floor(totalSeconds / 60)
+  if (!totalSeconds || isNaN(totalSeconds)) return "00:00";
+  const safeSeconds = Math.floor(Math.max(0, totalSeconds));
+  const minutes = Math.floor(safeSeconds / 60)
     .toString()
     .padStart(2, "0");
-  const seconds = (totalSeconds % 60).toString().padStart(2, "0");
+  const seconds = (safeSeconds % 60).toString().padStart(2, "0");
   return `${minutes}:${seconds}`;
+}
+
+export function formatTuning(tuningValue: string): string {
+  if (!tuningValue) return "—";
+  const preset = TUNING_PRESETS.find((p) => p.value === tuningValue);
+  const text = preset ? preset.label : tuningValue;
+  return text.split("(")[0].trim();
 }
 
 export function formatDate(timestamp: number): string {

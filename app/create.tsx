@@ -1,71 +1,177 @@
+import { showToast } from "@/components/AppToast";
+import { IdeaForm } from "@/components/IdeaForm";
+import { RiffRecorder, RiffRecorderRef } from "@/components/RiffRecorder";
 import { Screen } from "@/components/Screen";
 import { useTheme } from "@/components/ThemeProvider";
-import { addRiff } from "@/src/storage/riffs";
-import { Riff } from "@/src/types/riff";
+import { APP_CONFIG } from "@/src/constants/app";
 import { useHaptic } from "@/src/hooks/useHaptic";
-import { APP_CONFIG, TUNING_PRESETS } from "@/src/constants/app";
+import { getProjects } from "@/src/storage/projects";
+import { addRiff } from "@/src/storage/riffs";
+import { Project } from "@/src/types/project";
+import { Riff } from "@/src/types/riff";
+import { detectSmartBPM } from "@/src/utils/audioProcessing";
 import { generateId } from "@/src/utils/formatters";
-import { Stack, useRouter } from "expo-router";
-import { useState } from "react";
-import {
-  Alert,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  ScrollView,
-} from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { Stack, useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import {
+    Alert,
+    BackHandler,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View
+} from "react-native";
+
+function getDefaultRiffName(): string {
+  const now = new Date();
+  const day = now.getDate().toString().padStart(2, "0");
+  const month = (now.getMonth() + 1).toString().padStart(2, "0");
+  const hours = now.getHours().toString().padStart(2, "0");
+  const mins = now.getMinutes().toString().padStart(2, "0");
+  return `Ideia ${day}/${month} ${hours}:${mins}`;
+}
 
 export default function CreateRiff() {
+  const [audioUri, setAudioUri] = useState<string | undefined>();
   const router = useRouter();
   const theme = useTheme();
   const { triggerHaptic } = useHaptic();
 
-  const [title, setTitle] = useState("");
-  const [bpm, setBpm] = useState("");
-  const [tuning, setTuning] = useState<{
-    type: "preset" | "custom";
-    value: string;
-  } | null>(null);
-  const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
 
-  const titleError = title.length > APP_CONFIG.MAX_RIFF_TITLE_LENGTH;
-  const notesError = notes.length > APP_CONFIG.MAX_RIFF_NOTES_LENGTH;
+  const [waveform, setWaveform] = useState<number[]>([]);
+  const [duration, setDuration] = useState(0);
+
+  const initialRiff = useRef<Riff>({
+    id: generateId(),
+    name: getDefaultRiffName(),
+    createdAt: Date.now(),
+    duration: 0,
+    audioUri: "",
+    waveform: [],
+  }).current;
+
+  const [formData, setFormData] = useState<Riff>(initialRiff);
+  const [isDirty, setIsDirty] = useState(false);
+
+  useEffect(() => {
+    getProjects().then(setProjects);
+  }, []);
+  
+  // Refs to hold latest form values for unmount saving
+  const latestAudio = useRef<{ uri?: string; duration: number; levels: number[]; averageRms?: number; energyLevel?: "low" | "medium" | "high" }>({
+    uri: undefined,
+    duration: 0,
+    levels: [],
+  });
+  const latestFormData = useRef<Riff>(formData);
+  const hasSaved = useRef(false);
+  const recorderRef = useRef<RiffRecorderRef>(null);
+
+  // Keep refs in sync with state
+  useEffect(() => { latestFormData.current = formData; }, [formData]);
+
+  // Prevent accidental back navigation
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        if (!hasSaved.current && (audioUri || recorderRef.current?.isRecording())) {
+          Alert.alert(
+            "Descartar Gravação?",
+            "Você tem uma gravação em andamento ou não salva. Deseja mesmo sair?",
+            [
+              { text: "Cancelar", style: "cancel" },
+              { text: "Sair e Descartar", style: "destructive", onPress: () => { router.back(); } }
+            ]
+          );
+          return true; // prevent default behavior
+        }
+        return false;
+      };
+
+      const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+      return () => subscription.remove();
+    }, [audioUri])
+  );
+
+  const nameError = formData.name.length > APP_CONFIG.MAX_RIFF_TITLE_LENGTH;
+  const notesError = (formData.notes?.length || 0) > APP_CONFIG.MAX_RIFF_NOTES_LENGTH;
+
+  async function saveRiff(autoSave = false) {
+    const uri = autoSave ? latestAudio.current.uri : audioUri;
+    const dur = autoSave ? latestAudio.current.duration : duration;
+    const lvls = autoSave ? latestAudio.current.levels : waveform;
+    const rms = autoSave ? latestAudio.current.averageRms : latestAudio.current.averageRms;
+    const energy = autoSave ? latestAudio.current.energyLevel : latestAudio.current.energyLevel;
+
+    if (!uri) return false;
+
+    try {
+      const dataToSave = autoSave ? latestFormData.current : formData;
+      const finalName = dataToSave.name.trim() || getDefaultRiffName();
+
+      const newRiff: Riff = {
+        ...dataToSave,
+        name: finalName,
+        createdAt: Date.now(), // update precise time
+        duration: dur,
+        waveform: lvls,
+        audioUri: uri,
+        averageRms: rms ?? dataToSave.averageRms,
+        energyLevel: energy ?? dataToSave.energyLevel,
+        notes: dataToSave.notes?.trim() || undefined,
+      };
+
+      await addRiff(newRiff);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function handleDetectBPM() {
+    if (!waveform || duration <= 0) return;
+    const result = detectSmartBPM(waveform, duration);
+    if (result) {
+      setFormData(prev => ({ ...prev, detectedBpm: result.detectedBpm, suggestedBpms: result.suggestedBpms }));
+      triggerHaptic("success");
+    }
+  }
 
   async function handleSave() {
-    if (!title.trim()) {
-      Alert.alert("Ops", "Dê um nome pro riff 🎸");
+    if (recorderRef.current?.isRecording()) {
+      await recorderRef.current.stopRecording();
+      // Wait a tiny bit for state to commit the new URI via onChange
+      await new Promise((r) => setTimeout(r, 100));
+    }
+
+    if (!audioUri && !latestAudio.current.uri) {
+      showToast({ type: 'warning', title: 'Ops', message: 'Grave um áudio primeiro.' });
       triggerHaptic("warning");
       return;
     }
 
-    if (titleError || notesError) {
-      Alert.alert("Ops", "Alguns campos estão muito longos.");
+    if (nameError || notesError) {
+      showToast({ type: 'error', title: 'Campos inválidos', message: 'Alguns campos estão muito longos.' });
       triggerHaptic("error");
       return;
     }
 
     setSaving(true);
     try {
-      const parsedBpm = Number(bpm.replace(",", "."));
-      const newRiff: Riff = {
-        id: generateId(),
-        title: title.trim(),
-        bpm: Number.isFinite(parsedBpm) && parsedBpm > 0 ? parsedBpm : undefined,
-        tuning: tuning || undefined,
-        notes: notes.trim() || undefined,
-        createdAt: Date.now(),
-      };
-
-      await addRiff(newRiff);
-      triggerHaptic("success");
-      router.back();
-    } catch (error) {
-      Alert.alert("Erro", "Não foi possível salvar o riff. Tente novamente.");
-      triggerHaptic("error");
+      const ok = await saveRiff(false);
+      if (ok) {
+        hasSaved.current = true;
+        triggerHaptic("success");
+        router.back();
+      } else {
+        showToast({ type: 'error', title: 'Erro', message: 'Não foi possível salvar o riff. Tente novamente.' });
+        triggerHaptic("error");
+      }
     } finally {
       setSaving(false);
     }
@@ -75,7 +181,7 @@ export default function CreateRiff() {
     <>
       <Stack.Screen
         options={{
-          title: "Novo Riff",
+          title: "Nova Ideia",
           headerStyle: {
             backgroundColor: theme.background,
           },
@@ -84,154 +190,83 @@ export default function CreateRiff() {
             color: theme.primary,
             fontWeight: "bold",
           },
-          headerShadowVisible: false,
+          headerShadowVisible: true,
+          headerLeft: () => (
+            <Pressable
+              style={{ padding: 8, marginLeft: -8 }}
+              onPress={() => {
+                if (!hasSaved.current && (audioUri || recorderRef.current?.isRecording())) {
+                  Alert.alert(
+                    "Descartar Gravação?",
+                    "Você tem uma gravação não salva. Deseja mesmo sair?",
+                    [
+                      { text: "Cancelar", style: "cancel" },
+                      { text: "Sair e Descartar", style: "destructive", onPress: () => { router.back(); } }
+                    ]
+                  );
+                } else {
+                  router.back();
+                }
+              }}
+            >
+              <FontAwesome name="chevron-left" size={20} color={theme.primaryForeground} />
+            </Pressable>
+          ),
         }}
       />
 
       <Screen background={theme.background}>
-        <ScrollView showsVerticalScrollIndicator={false}>
-          <Text
-            style={{
-              fontSize: 22,
-              fontWeight: "bold",
-              marginBottom: 16,
-              color: theme.primary,
-            }}
-          >
-            Novo riff
-          </Text>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
 
-          <Text style={[styles.label, { color: theme.mutedForeground }]}>
-            Nome *
-          </Text>
-          <TextInput
-            autoFocus
-            placeholder="Nome do riff"
-            placeholderTextColor={theme.mutedForeground}
-            value={title}
-            onChangeText={setTitle}
-            maxLength={APP_CONFIG.MAX_RIFF_TITLE_LENGTH}
-            style={[
-              styles.input,
-              {
-                backgroundColor: theme.input,
-                color: theme.foreground,
-                borderColor: titleError ? theme.destructive : "transparent",
-                borderWidth: titleError ? 1 : 0,
-              },
-            ]}
-          />
-          {titleError && (
-            <Text style={[styles.errorText, { color: theme.destructive }]}>
-              Muito longo ({title.length}/{APP_CONFIG.MAX_RIFF_TITLE_LENGTH})
+          {/* RECORDING — CORE SECTION */}
+          <View style={[styles.coreSection, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Text style={[styles.coreSectionTitle, { color: theme.primary }]}>
+              Gravação
             </Text>
-          )}
-
-          <Text style={[styles.label, { color: theme.mutedForeground }]}>
-            BPM
-          </Text>
-          <TextInput
-            placeholder="Ex: 120"
-            keyboardType="numeric"
-            placeholderTextColor={theme.mutedForeground}
-            value={bpm}
-            onChangeText={setBpm}
-            style={[
-              styles.input,
-              { backgroundColor: theme.input, color: theme.foreground },
-            ]}
-          />
-
-          <Text style={[styles.label, { color: theme.mutedForeground }]}>
-            Afinação
-          </Text>
-          <View style={styles.tuningRow}>
-            {TUNING_PRESETS.map((preset) => {
-              const active =
-                tuning?.type === "preset" && tuning.value === preset.value;
-
-              return (
-                <Pressable
-                  key={preset.value}
-                  onPress={() => {
-                    setTuning({ type: "preset", value: preset.value });
-                    triggerHaptic("light");
-                  }}
-                  style={[
-                    styles.tuningChip,
-                    {
-                      backgroundColor: active ? theme.primary : theme.input,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={{
-                      color: active
-                        ? theme.primaryForeground
-                        : theme.foreground,
-                      fontSize: 11,
-                      fontWeight: active ? "600" : "normal",
-                    }}
-                  >
-                    {preset.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
+            <RiffRecorder
+              ref={recorderRef}
+              audioUri={audioUri}
+              onChange={(data) => {
+                setAudioUri(data.uri);
+                setDuration(data.duration);
+                setWaveform(data.levels);
+                latestAudio.current = { 
+                  uri: data.uri, 
+                  duration: data.duration, 
+                  levels: data.levels,
+                  averageRms: data.averageRms,
+                  energyLevel: data.energyLevel
+                };
+              }}
+              maxSeconds={60}
+            />
           </View>
 
-          <TextInput
-            placeholder="Afinação customizada (ex: Drop C#)"
-            placeholderTextColor={theme.mutedForeground}
-            value={tuning?.type === "custom" ? tuning.value : ""}
-            onChangeText={(text) =>
-              setTuning({ type: "custom", value: text })
-            }
-            style={[
-              styles.input,
-              { backgroundColor: theme.input, color: theme.foreground },
-            ]}
+          {/* DETAILS SECTION via IdeaForm */}
+          <IdeaForm
+            initialRiff={initialRiff}
+            projects={projects}
+            onDirtyChange={(dirty, currentRiff) => {
+              setIsDirty(dirty);
+              setFormData(currentRiff);
+            }}
           />
 
-          <Text style={[styles.label, { color: theme.mutedForeground }]}>
-            Notas / Ideia
-          </Text>
-          <TextInput
-            placeholder="Escreva suas ideias, progressões, ou observações..."
-            placeholderTextColor={theme.mutedForeground}
-            value={notes}
-            onChangeText={setNotes}
-            maxLength={APP_CONFIG.MAX_RIFF_NOTES_LENGTH}
-            multiline
-            textAlignVertical="top"
-            style={[
-              styles.input,
-              {
-                height: 120,
-                backgroundColor: theme.input,
-                color: theme.foreground,
-                borderColor: notesError ? theme.destructive : "transparent",
-                borderWidth: notesError ? 1 : 0,
-              },
-            ]}
-          />
-          {notesError && (
-            <Text style={[styles.errorText, { color: theme.destructive }]}>
-              Muito longo ({notes.length}/{APP_CONFIG.MAX_RIFF_NOTES_LENGTH})
-            </Text>
-          )}
-
-          <Pressable
-            onPress={handleSave}
-            disabled={!title.trim() || saving || titleError || notesError}
-            style={[
-              styles.button,
-              {
-                backgroundColor: theme.primary,
-                opacity: title.trim() && !saving && !titleError && !notesError ? 1 : 0.5,
-              },
-            ]}
-          >
+          <View style={{ paddingHorizontal: 16 }}>
+            <Pressable
+              onPress={handleSave}
+              disabled={!audioUri || saving || nameError || notesError}
+              style={[
+                styles.button,
+                {
+                  backgroundColor: theme.primary,
+                  opacity:
+                    audioUri && !saving && !nameError && !notesError
+                      ? 1
+                      : 0.5,
+                },
+              ]}
+            >
             {saving ? (
               <>
                 <FontAwesome
@@ -253,12 +288,14 @@ export default function CreateRiff() {
                 style={{
                   color: theme.primaryForeground,
                   fontWeight: "bold",
+                  fontSize: 16,
                 }}
               >
-                Salvar riff
+                Salvar Ideia
               </Text>
             )}
-          </Pressable>
+            </Pressable>
+          </View>
         </ScrollView>
       </Screen>
     </>
@@ -266,32 +303,17 @@ export default function CreateRiff() {
 }
 
 const styles = StyleSheet.create({
-  label: {
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 6,
+  coreSection: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 20,
     marginTop: 8,
   },
-  input: {
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 8,
-  },
-  errorText: {
-    fontSize: 11,
-    marginBottom: 8,
-  },
-  tuningRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
+  coreSectionTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
     marginBottom: 12,
-  },
-  tuningChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
   },
   button: {
     marginTop: 16,

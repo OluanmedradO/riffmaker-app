@@ -1,5 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from "react";
-import { StyleSheet, Text, View, Pressable } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 interface Props {
   children: ReactNode;
@@ -37,7 +37,6 @@ export class ErrorBoundary extends Component<Props, State> {
 
       return (
         <View style={styles.container}>
-          <Text style={styles.emoji}>😵</Text>
           <Text style={styles.title}>Ops! Algo deu errado</Text>
           <Text style={styles.message}>
             Ocorreu um erro inesperado. Tente novamente.
@@ -61,10 +60,7 @@ const styles = StyleSheet.create({
     padding: 24,
     backgroundColor: "#0a0a0a",
   },
-  emoji: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
+
   title: {
     fontSize: 24,
     fontWeight: "bold",
