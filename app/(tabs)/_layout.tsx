@@ -1,27 +1,41 @@
+import { CustomTabBar } from "@/components/CustomTabBar";
 import { useTheme } from "@/components/ThemeProvider";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Tabs } from "expo-router";
+import { ArrowsLeftRight, FolderSimple, Gear, Waveform } from "phosphor-react-native";
 
 export default function TabsLayout() {
   const theme = useTheme();
   return (
     <Tabs
+      tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          backgroundColor: theme.background,
-          borderTopColor: theme.border,
-        },
-        tabBarActiveTintColor: theme.primary,
-        tabBarInactiveTintColor: theme.mutedForeground,
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: "Riffs",
+          title: "Ideias",
           tabBarIcon: ({ color }) => (
-            <FontAwesome name="music" size={20} color={color} />
+            <Waveform weight="regular" size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="projects"
+        options={{
+          title: "Projetos",
+          tabBarIcon: ({ color }) => (
+            <FolderSimple weight="regular" size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="compare"
+        options={{
+          title: "Comparar",
+          tabBarIcon: ({ color }) => (
+            <ArrowsLeftRight weight="regular" size={24} color={color} />
           ),
         }}
       />
@@ -30,7 +44,7 @@ export default function TabsLayout() {
         options={{
           title: "Configurações",
           tabBarIcon: ({ color }) => (
-            <FontAwesome name="cog" size={20} color={color} />
+            <Gear weight="regular" size={24} color={color} />
           ),
         }}
       />

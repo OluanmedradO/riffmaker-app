@@ -1,95 +1,249 @@
+import { showToast } from "@/components/AppToast";
 import { Screen } from "@/components/Screen";
 import { useTheme } from "@/components/ThemeProvider";
+import { useSecretTap } from "@/src/hooks/useSecretTap";
+import { exportFullBackup, restoreFullBackup } from "@/src/utils/backup";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FileSystem from "expo-file-system/legacy";
 import { useRouter } from "expo-router";
 import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  Alert,
+    ArrowCounterClockwise,
+    CaretRight,
+    Crown,
+    DownloadSimple,
+    HourglassHigh,
+    Info,
+    Package,
+    ShieldCheck,
+    Trash,
+} from "phosphor-react-native";
+import { useEffect, useState } from "react";
+import {
+    ActivityIndicator,
+    Alert,
+    Modal,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    View,
 } from "react-native";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useState } from "react";
 
 export default function Settings() {
   const theme = useTheme();
   const router = useRouter();
   const [clearing, setClearing] = useState(false);
+  const [countdownEnabled, setCountdownEnabled] = useState(false);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [restoreLoading, setRestoreLoading] = useState(false);
 
-  async function handleClearData() {
-    Alert.alert(
-      "Limpar todos os dados?",
-      "Esta ação irá deletar TODOS os seus riffs e não pode ser desfeita. Tem certeza?",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Limpar Tudo",
-          style: "destructive",
-          onPress: async () => {
-            setClearing(true);
-            try {
-              await AsyncStorage.clear();
-              Alert.alert("Sucesso", "Todos os dados foram removidos.");
-              router.back();
-            } catch (error) {
-              Alert.alert("Erro", "Não foi possível limpar os dados.");
-            } finally {
-              setClearing(false);
-            }
-          },
-        },
-      ],
-    );
+  useEffect(() => {
+    AsyncStorage.getItem("@countdown_enabled").then((val) => {
+      setCountdownEnabled(val === "true");
+    });
+  }, []);
+
+  async function handleToggleCountdown(value: boolean) {
+    setCountdownEnabled(value);
+    await AsyncStorage.setItem("@countdown_enabled", String(value));
+  }
+
+  const [showClearModal, setShowClearModal] = useState(false);
+
+  function handleClearData() {
+    setShowClearModal(true);
+  }
+
+  async function performClearData() {
+    setClearing(true);
+    try {
+      await AsyncStorage.clear();
+      setShowClearModal(false);
+      Alert.alert("Sucesso", "Todos os dados foram removidos.");
+      router.back();
+    } catch (error) {
+      Alert.alert("Erro", "Não foi possível limpar os dados.");
+    } finally {
+      setClearing(false);
+    }
   }
 
   function handlePrivacyPolicy() {
     Alert.alert(
       "Política de Privacidade",
-      "O Riff Maker não coleta ou compartilha seus dados. Tudo fica armazenado localmente no seu dispositivo.\n\nPara mais detalhes, consulte PRIVACY_POLICY.md no repositório.",
+      "O Riff Maker não coleta ou compartilha seus dados. Tudo fica armazenado localmente no seu dispositivo.",
     );
   }
 
   async function handleExportData() {
+    try {
+      await exportFullBackup();
+    } catch (e) {
+      Alert.alert("Erro", "Falha ao exportar backup.");
+    }
+  }
+
+  async function handleExportFullBackup() {
+    setBackupLoading(true);
+    try {
+      const result = await exportFullBackup();
+      if (result.success) {
+        showToast({ type: "success", message: result.message });
+      } else {
+        Alert.alert("Backup Falhou", result.message);
+      }
+    } catch (e: any) {
+      Alert.alert("Erro", e?.message ?? "Falha ao exportar backup completo.");
+    } finally {
+      setBackupLoading(false);
+    }
+  }
+
+  async function handleRestoreBackup() {
     Alert.alert(
-      "Em desenvolvimento",
-      "A funcionalidade de exportação de dados estará disponível em breve!",
+      "Restaurar Backup",
+      "Escolha o arquivo backup.json. Os dados atuais serão sobrescritos.\n\nNo seu gerenciador de arquivos, localize o backup.json exportado e forneça o caminho.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Continuar",
+          onPress: () => {
+            // On Android: use SAF read to pick JSON file
+            _pickAndRestore();
+          },
+        },
+      ]
     );
   }
 
+  async function _pickAndRestore() {
+    setRestoreLoading(true);
+    try {
+      // Use SAF to request read permission and pick JSON file
+      const result = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+      if (!result.granted) {
+        Alert.alert("Permissão Negada", "Acesso à pasta cancelado.");
+        return;
+      }
+
+      // List files in chosen folder to find backup.json
+      const files = await FileSystem.StorageAccessFramework.readDirectoryAsync(result.directoryUri);
+      const backupFileUri = files.find((f) => f.endsWith("backup.json") || f.includes("riffmaker_backup"));
+
+      if (!backupFileUri) {
+        Alert.alert("Arquivo não encontrado", "Não encontrei um arquivo backup.json na pasta selecionada. Certifique-se de selecionar a pasta onde foi salvo o backup.");
+        return;
+      }
+
+      // Copy to cache for reading
+      const cacheUri = `${FileSystem.cacheDirectory}riffmaker_restore.json`;
+      const content = await FileSystem.StorageAccessFramework.readAsStringAsync(backupFileUri);
+      await FileSystem.writeAsStringAsync(cacheUri, content);
+
+      const restoreResult = await restoreFullBackup(cacheUri);
+      if (restoreResult.success) {
+        showToast({ type: "success", message: restoreResult.message });
+      } else {
+        Alert.alert("Restauração Falhou", restoreResult.message);
+      }
+    } catch (e: any) {
+      Alert.alert("Erro", e?.message ?? "Falha ao restaurar backup.");
+    } finally {
+      setRestoreLoading(false);
+    }
+  }
+
+  const handleSecretTap = useSecretTap(() => router.push("/dev"), 5, 2500);
+
   return (
     <Screen background={theme.background}>
-      <Text
-        style={[
-          styles.title,
-          { color: theme.primary, marginTop: 16 },
-        ]}
-      >
-        Configurações
-      </Text>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
+      <Pressable onPress={handleSecretTap}>
+        <Text
+          style={[
+            styles.title,
+            { color: theme.foreground, marginTop: 16 },
+          ]}
+        >
+          Configurações
+        </Text>
+      </Pressable>
 
       <Text
         style={[
           styles.sectionTitle,
-          { color: theme.primary, marginTop: 24 },
+          { color: theme.mutedForeground, marginTop: 24 },
         ]}
       >
-        Dados
+        Gravação
       </Text>
 
+      <View style={[styles.item, { backgroundColor: theme.card }]}>
+        <HourglassHigh size={20} color={theme.foreground} weight="regular" />
+        <Text style={[styles.itemText, { color: theme.foreground }]}>
+          Contagem regressiva 3..2..1
+        </Text>
+        <Switch
+          value={countdownEnabled}
+          onValueChange={handleToggleCountdown}
+          trackColor={{ false: theme.border, true: theme.primary }}
+        />
+      </View>
+
+      <Text
+        style={[
+          styles.sectionTitle,
+          { color: theme.mutedForeground, marginTop: 24 },
+        ]}
+      >
+        Backup & Dados
+      </Text>
+
+      {/* Export Metadata (legacy) */}
       <Pressable
         onPress={handleExportData}
         style={[styles.item, { backgroundColor: theme.card }]}
       >
-        <FontAwesome name="download" size={20} color={theme.foreground} />
+        <DownloadSimple size={20} color={theme.foreground} weight="regular" />
         <Text style={[styles.itemText, { color: theme.foreground }]}>
-          Exportar riffs
+          Exportar metadados (JSON)
         </Text>
-        <FontAwesome
-          name="chevron-right"
-          size={16}
-          color={theme.mutedForeground}
-        />
+        <CaretRight size={16} color={theme.mutedForeground} weight="bold" />
+      </Pressable>
+
+      {/* Full Backup */}
+      <Pressable
+        onPress={handleExportFullBackup}
+        disabled={backupLoading}
+        style={[styles.item, { backgroundColor: theme.card }]}
+      >
+        <Package size={20} color={theme.primary} weight="regular" />
+        <Text style={[styles.itemText, { color: theme.foreground }]}>
+          {backupLoading ? "Exportando..." : "Exportar Backup Completo"}
+        </Text>
+        {backupLoading ? (
+          <ActivityIndicator size="small" color={theme.primary} />
+        ) : (
+          <CaretRight size={16} color={theme.mutedForeground} weight="bold" />
+        )}
+      </Pressable>
+
+      {/* Restore Backup */}
+      <Pressable
+        onPress={handleRestoreBackup}
+        disabled={restoreLoading}
+        style={[styles.item, { backgroundColor: theme.card }]}
+      >
+        <ArrowCounterClockwise size={20} color={theme.primary} weight="regular" />
+        <Text style={[styles.itemText, { color: theme.foreground }]}>
+          {restoreLoading ? "Restaurando..." : "Restaurar Backup"}
+        </Text>
+        {restoreLoading ? (
+          <ActivityIndicator size="small" color={theme.primary} />
+        ) : (
+          <CaretRight size={16} color={theme.mutedForeground} weight="bold" />
+        )}
       </Pressable>
 
       <Pressable
@@ -97,33 +251,46 @@ export default function Settings() {
         disabled={clearing}
         style={[styles.item, { backgroundColor: theme.card }]}
       >
-        <FontAwesome name="trash" size={20} color={theme.destructive} />
-        <Text style={[styles.itemText, { color: theme.destructive }]}>
+        <Trash size={20} color={theme.destructive} weight="fill" />
+        <Text style={[styles.itemText, { color: theme.destructive, fontWeight: "bold" }]}>
           {clearing ? "Limpando..." : "Limpar todos os dados"}
         </Text>
       </Pressable>
 
-      <Text style={[styles.sectionTitle, { color: theme.primary }]}>
+      <Text style={[styles.sectionTitle, { color: theme.mutedForeground }]}>
         Informações
       </Text>
+
+      {/* PRO Banner */}
+      <Pressable
+        onPress={() => router.push("/pro")}
+        style={[styles.item, {
+          backgroundColor: theme.proPurple + "12",
+          borderWidth: 1,
+          borderColor: theme.proPurple + "30",
+        }]}
+      >
+        <Crown size={20} color={theme.proPurple} weight="fill" />
+        <Text style={[styles.itemText, { color: theme.foreground, fontWeight: "bold" }]}>
+          Riff Maker PRO
+        </Text>
+        <Text style={{ color: theme.proPurple, fontSize: 13, fontWeight: "bold" }}>Ver</Text>
+        <CaretRight size={16} color={theme.proPurple} weight="bold" />
+      </Pressable>
 
       <Pressable
         onPress={handlePrivacyPolicy}
         style={[styles.item, { backgroundColor: theme.card }]}
       >
-        <FontAwesome name="shield" size={20} color={theme.foreground} />
+        <ShieldCheck size={20} color={theme.foreground} weight="regular" />
         <Text style={[styles.itemText, { color: theme.foreground }]}>
           Política de Privacidade
         </Text>
-        <FontAwesome
-          name="chevron-right"
-          size={16}
-          color={theme.mutedForeground}
-        />
+        <CaretRight size={16} color={theme.mutedForeground} weight="bold" />
       </Pressable>
 
       <View style={[styles.item, { backgroundColor: theme.card }]}>
-        <FontAwesome name="info-circle" size={20} color={theme.foreground} />
+        <Info size={20} color={theme.foreground} weight="regular" />
         <Text style={[styles.itemText, { color: theme.foreground }]}>
           Versão
         </Text>
@@ -132,11 +299,40 @@ export default function Settings() {
         </Text>
       </View>
 
-      <Text
-        style={[styles.footer, { color: theme.mutedForeground }]}
-      >
-        Feito com ❤️ para músicos
-      </Text>
+      {/* CLEAR DATA MODAL */}
+      <Modal visible={showClearModal} transparent animationType="fade">
+        <Pressable style={styles.modalOverlay} onPress={() => setShowClearModal(false)}>
+          <Pressable style={[styles.modalContent, { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1, padding: 24 }]}>
+            <View style={{ marginBottom: 20, alignItems: "center" }}>
+              <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: theme.destructive + "20", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+                <Trash size={32} color={theme.destructive} weight="fill" />
+              </View>
+              <Text style={{ fontSize: 20, fontWeight: "900", color: theme.foreground, textAlign: "center", marginBottom: 8 }}>
+                Deletar tudo?
+              </Text>
+              <Text style={{ fontSize: 15, color: theme.mutedForeground, textAlign: "center", lineHeight: 22 }}>
+                Esta ação apagará permanentemente todos os seus Projetos, Ideias, e Áudios gravados.{"\n\n"}Não pode ser desfeita.
+              </Text>
+            </View>
+            <View style={{ flexDirection: "row", gap: 12 }}>
+              <Pressable
+                style={{ flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: theme.input, alignItems: "center" }}
+                onPress={() => setShowClearModal(false)}
+              >
+                <Text style={{ color: theme.foreground, fontWeight: "bold" }}>Cancelar</Text>
+              </Pressable>
+
+              <Pressable
+                style={{ flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: theme.destructive, alignItems: "center" }}
+                onPress={performClearData}
+              >
+                <Text style={{ color: "#fff", fontWeight: "bold" }}>Apagar Tudo</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      </ScrollView>
     </Screen>
   );
 }
@@ -169,9 +365,16 @@ const styles = StyleSheet.create({
   versionText: {
     fontSize: 14,
   },
-  footer: {
-    textAlign: "center",
-    marginTop: 32,
-    fontSize: 13,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  modalContent: {
+    width: "100%",
+    borderRadius: 24,
+    maxWidth: 400,
   },
 });
