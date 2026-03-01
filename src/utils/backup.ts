@@ -6,7 +6,7 @@ import { getRiffs, saveRiffs } from "../storage/riffs";
 
 const RIFFS_DIR = `${FileSystem.documentDirectory ?? ""}riffs/`;
 const BACKUP_DIR = `${FileSystem.documentDirectory ?? ""}riffmaker_backup/`;
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "1.2.0";
 const SCHEMA_VERSION = 2;
 
 // ---------------------------------------------------------------------------

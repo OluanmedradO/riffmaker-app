@@ -3,6 +3,7 @@ import { Screen } from "@/components/Screen";
 import { useTheme } from "@/components/ThemeProvider";
 import { RiffCardSkeleton } from "@/src/components/SkeletonLoader";
 import { useHaptic } from "@/src/hooks/useHaptic";
+import { useTranslation } from "@/src/i18n";
 import { PROJECT_COLORS, deleteProject, getProjects, updateProject } from "@/src/storage/projects";
 import { deleteRiff, duplicateIdea, getRiffsByProject, toggleFavorite, updateRiff } from "@/src/storage/riffs";
 import { Project } from "@/src/types/project";
@@ -41,6 +42,7 @@ export default function ProjectDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const theme = useTheme();
+  const { t } = useTranslation();
   const { triggerHaptic } = useHaptic();
 
   const [project, setProject] = useState<Project | null>(null);
@@ -92,16 +94,16 @@ export default function ProjectDetail() {
       setIsEditing(false);
       triggerHaptic("success");
     } catch (e) {
-      Alert.alert("Erro", "Não foi possível atualizar o projeto.");
+      Alert.alert(t("project.error"), t("project.update_failed"));
     }
   };
 
   const handleDeleteProject = () => {
     if (!project || !id) return;
-    Alert.alert("Apagar projeto", `Excluir a pasta "${project.name}"?\nIsso NÃO apagará os áudios guardados nela.`, [
-      { text: "Cancelar", style: "cancel" },
+    Alert.alert(t("project.delete_title"), t("project.delete_desc", { name: project.name }), [
+      { text: t("cancel"), style: "cancel" },
       {
-        text: "Apagar",
+        text: t("project.delete_action"),
         style: "destructive",
         onPress: async () => {
           try {
@@ -109,7 +111,7 @@ export default function ProjectDetail() {
             triggerHaptic("success");
             router.back();
           } catch (e) {
-             Alert.alert("Erro", "Não foi possível excluir o projeto.");
+             Alert.alert(t("project.error"), t("project.delete_failed"));
           }
         },
       },
@@ -122,15 +124,15 @@ export default function ProjectDetail() {
       triggerHaptic("medium");
       await loadData();
     } catch (e) {
-      Alert.alert("Erro", "Não foi possível remover do projeto.");
+      Alert.alert(t("project.error"), t("project.remove_failed"));
     }
   };
 
-  async function handleDeleteRealRiff(riffId: string) {
-    Alert.alert("Apagar ideia?", "Essa ação não pode ser desfeita.", [
-      { text: "Cancelar", style: "cancel" },
+  const handleDeleteRealRiff = useCallback(async (riffId: string) => {
+    Alert.alert(t("project.delete_idea_title"), t("project.delete_idea_desc"), [
+      { text: t("cancel"), style: "cancel" },
       {
-        text: "Apagar",
+        text: t("project.delete_idea_action"),
         style: "destructive",
         onPress: async () => {
           triggerHaptic("medium");
@@ -139,46 +141,61 @@ export default function ProjectDetail() {
             await loadData();
             triggerHaptic("success");
           } catch (error) {
-            Alert.alert("Erro", "Não foi possível apagar a ideia.");
+            Alert.alert(t("project.error"), t("project.delete_idea_failed"));
             triggerHaptic("error");
           }
         },
       },
     ]);
-  }
+  }, [loadData, triggerHaptic, t]);
 
-  async function handleDuplicateRiff(riffId: string) {
+  const handleDuplicateRiff = useCallback(async (riffId: string) => {
     try {
       triggerHaptic("light");
       const duplicate = await duplicateIdea(riffId);
-      if (duplicate) {
+      if (duplicate && id) {
         // Automatically put the duplicate in the same project context
         await updateRiff(duplicate.id, { projectId: id });
         await loadData();
         triggerHaptic("success");
       }
     } catch (error) {
-      Alert.alert("Erro", "Não foi possível duplicar a ideia.");
+      Alert.alert(t("project.error"), t("project.duplicate_idea_failed"));
       triggerHaptic("error");
     }
-  }
+  }, [id, loadData, triggerHaptic, t]);
 
-  async function handleToggleFavorite(riffId: string) {
+  const handleToggleFavorite = useCallback(async (riffId: string) => {
     try {
       triggerHaptic("light");
       await toggleFavorite(riffId);
       await loadData();
     } catch (error) {
-      Alert.alert("Erro", "Não foi possível atualizar os favoritos.");
+      Alert.alert(t("project.error"), t("project.favorite_failed"));
     }
-  }
+  }, [loadData, triggerHaptic, t]);
+
+  const handlePressCard = useCallback((riffId: string) => {
+    router.push(`/riff/${riffId}`);
+  }, [router]);
+
+  const renderItem = useCallback(({ item }: { item: Riff }) => (
+    <RiffCard
+      riff={item}
+      onDelete={handleDeleteRealRiff}
+      onDuplicate={handleDuplicateRiff}
+      onToggleFavorite={handleToggleFavorite}
+      onPress={handlePressCard}
+      projectColor={project?.color}
+    />
+  ), [handleDeleteRealRiff, handleDuplicateRiff, handleToggleFavorite, handlePressCard, project?.color]);
 
   if (loading || !project) {
     return (
       <>
         <Stack.Screen 
           options={{
-             title: "Carregando...",
+             title: t("project.loading"),
              headerStyle: { backgroundColor: theme.background },
              headerTintColor: theme.foreground,
           }} 
@@ -196,7 +213,7 @@ export default function ProjectDetail() {
     <>
       <Stack.Screen 
         options={{
-           title: isEditing ? "Editando Projeto" : project.name,
+           title: isEditing ? t("project.editing") : project.name,
            headerStyle: { backgroundColor: theme.background },
            headerTintColor: theme.foreground,
            headerRight: () => !isEditing && (
@@ -215,7 +232,7 @@ export default function ProjectDetail() {
               </View>
               <TextInput
                 style={[styles.inputName, { flex: 1, backgroundColor: theme.input, color: theme.foreground }]}
-                placeholder="Nome do Projeto..."
+                placeholder={t("project.name_placeholder")}
                 placeholderTextColor={theme.mutedForeground}
                 value={editName}
                 onChangeText={setEditName}
@@ -246,14 +263,14 @@ export default function ProjectDetail() {
 
             <View style={styles.editActions}>
               <Pressable onPress={handleDeleteProject} style={[styles.actionBtn, { marginRight: "auto" }]}>
-                <Text style={{ color: theme.destructive, fontWeight: "600" }}>Apagar</Text>
+                <Text style={{ color: theme.destructive, fontWeight: "600" }}>{t("delete")}</Text>
               </Pressable>
               
               <Pressable onPress={() => setIsEditing(false)} style={styles.actionBtn}>
-                <Text style={{ color: theme.mutedForeground, fontWeight: "600" }}>Cancelar</Text>
+                <Text style={{ color: theme.mutedForeground, fontWeight: "600" }}>{t("cancel")}</Text>
               </Pressable>
               <Pressable onPress={handleUpdateProject} style={[styles.actionBtn, { backgroundColor: theme.primary }]}>
-                <Text style={{ color: theme.primaryForeground, fontWeight: "bold" }}>Salvar</Text>
+                <Text style={{ color: theme.primaryForeground, fontWeight: "bold" }}>{t("save")}</Text>
               </Pressable>
             </View>
           </View>
@@ -267,7 +284,7 @@ export default function ProjectDetail() {
               {project.name}
            </Text>
            <Text style={[styles.metaInfo, { color: theme.mutedForeground }]}>
-              {riffs.length} {riffs.length === 1 ? "ideia armazenada" : "ideias armazenadas"}
+              {riffs.length} {riffs.length === 1 ? t("project.idea_stored") : t("project.ideas_stored")}
            </Text>
         </View>
 
@@ -276,22 +293,17 @@ export default function ProjectDetail() {
           keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 60 }}
-          renderItem={({ item }) => (
-            <RiffCard
-              riff={item}
-              onDelete={handleDeleteRealRiff}
-              onDuplicate={handleDuplicateRiff}
-              onToggleFavorite={handleToggleFavorite}
-              onPress={(id) => router.push(`/riff/${id}`)}
-              projectColor={project.color}
-            />
-          )}
+          initialNumToRender={8}
+          maxToRenderPerBatch={6}
+          windowSize={5}
+          removeClippedSubviews={true}
+          renderItem={renderItem}
           ListEmptyComponent={
             <View style={styles.empty}>
               <MusicNote size={48} color={theme.mutedForeground} weight="duotone" />
-              <Text style={[styles.emptyTitle, { color: theme.foreground }]}>Essa pasta está vazia</Text>
+              <Text style={[styles.emptyTitle, { color: theme.foreground }]}>{t("project.empty_title")}</Text>
               <Text style={[styles.emptyDesc, { color: theme.mutedForeground }]}>
-                Navegue até a biblioteca, adicione uma Ideia e mova ela para este projeto.
+                {t("project.empty_desc")}
               </Text>
             </View>
           }

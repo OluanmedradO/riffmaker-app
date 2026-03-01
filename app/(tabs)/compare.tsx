@@ -1,15 +1,18 @@
+import { AnimatedHeaderTitle } from "@/components/AnimatedHeaderTitle";
 import { Screen } from "@/components/Screen";
 import { useTheme } from "@/components/ThemeProvider";
 import { LoadingSpinner } from "@/src/components/LoadingSpinner";
 import { useHaptic } from "@/src/hooks/useHaptic";
 import { useProGate } from "@/src/hooks/useProGate";
+import { useTranslation } from "@/src/i18n";
 import { getRiffs } from "@/src/storage/riffs";
 import { Riff } from "@/src/types/riff";
+import { calculateCompatibility } from "@/src/utils/compatibility";
 import { formatTime } from "@/src/utils/formatters";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { useFocusEffect } from "expo-router";
-import { ArrowsLeftRight, CheckCircle, Crown, Info, Pause, Play, Plus, X } from "phosphor-react-native";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowsLeftRight, CheckCircle, Crown, CrownIcon, Info, Pause, PauseIcon, Play, PlayIcon, Plus, PlusIcon, X } from "phosphor-react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 const TYPE_COLORS: Record<string, string> = {
@@ -23,6 +26,7 @@ const TYPE_COLORS: Record<string, string> = {
 
 export default function Compare() {
   const theme = useTheme();
+  const { t } = useTranslation();
   
   const [riffs, setRiffs] = useState<Riff[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,17 +75,18 @@ export default function Compare() {
   const statusB = useAudioPlayerStatus(playerB);
 
   // Sync Start
-  async function handleSyncStart() {
-    triggerHaptic("medium");
-    setAbMode(false);
-    playerA.pause();
-    playerB.pause();
-    playerA.seekTo(0);
-    playerB.seekTo(0);
+async function handleSyncStart() {
+  triggerHaptic("medium");
+  setAbMode(false);
+  playerA.pause();
+  playerB.pause();
+  await playerA.seekTo(0);
+  await playerB.seekTo(0);
+  setTimeout(() => {
     playerA.play();
     playerB.play();
-  }
-
+  }, 50); // pequena margem para o seek completar
+}
   function handlePlayA() {
     triggerHaptic("light");
     if (abMode) {
@@ -114,25 +119,26 @@ export default function Compare() {
     }
   }
 
-  // Calculate BPM compatibility (diff <= 5)
-  const isBpmCompatible = Boolean(
-    riffA?.bpm && riffB?.bpm && Math.abs(riffA.bpm - riffB.bpm) <= 5
-  );
+  // Calculate compatibility
+  const compatibility = useMemo(() => calculateCompatibility(riffA, riffB), [riffA, riffB]);
 
   const colorA = riffA?.type ? (TYPE_COLORS[riffA.type] || theme.primary) : theme.primary;
   const colorB = riffB?.type ? (TYPE_COLORS[riffB.type] || theme.secondary) : theme.secondary;
-
+  const normalizeWaveform = (lvl: number) => {
+    if (lvl <= 0) return Math.min(1, Math.max(0, (lvl + 160) / 160));
+    return Math.min(1, lvl);
+  };
   if (loading) {
     return (
       <Screen background={theme.background}>
-        <LoadingSpinner message="Carregando riffs..." />
+        <LoadingSpinner message={t("compare.loading")} />
       </Screen>
     );
   }
 
   return (
     <Screen background={theme.background}>
-      <Text style={[styles.title, { color: theme.primary, marginTop: 16 }]}>Comparar Ideias</Text>
+      <AnimatedHeaderTitle title={t("compare.title")} fontSize={24} fontWeight="900" style={{ marginTop: 16, marginBottom: 4 }} />
       <Text style={[styles.subtitle, { color: theme.mutedForeground }]}>
         Selecione duas ideias para compará-las lado a lado.
       </Text>
@@ -150,7 +156,7 @@ export default function Compare() {
           gap: 10,
         }}
       >
-        <Crown size={20} color={theme.proPurple} weight="fill" />
+        <CrownIcon size={20} color={theme.proPurple} weight="fill" />
         <Text style={{ color: theme.foreground, fontSize: 14, flex: 1, fontWeight: "600" }}>
           Recurso PRO — Compare e combine riffs
         </Text>
@@ -169,13 +175,13 @@ export default function Compare() {
             shadowOpacity: riffA ? 0.2 : 0.1,
             shadowRadius: riffA ? 16 : 10,
           }]}
-          onPress={() => { if (!requirePro("compareRiffs")) setPickingFor("A"); }}
+          onPress={() => { if (requirePro("compareRiffs")) return; setPickingFor("A"); }}
         >
           {riffA ? (
             <View style={styles.slotContent}>
               <View style={styles.slotHeader}>
                 <Text style={{ fontSize: 10, color: colorA, fontWeight: '900', letterSpacing: 1 }}>IDEIA A</Text>
-                <Pressable onPress={() => { setRiffA(null); playerA.remove(); }} hitSlop={10} style={{ padding: 4, backgroundColor: theme.muted, borderRadius: 12 }}>
+                <Pressable onPress={() => setRiffA(null)} hitSlop={10} style={{ padding: 4, backgroundColor: theme.muted, borderRadius: 12 }}>
                   <X size={12} color={theme.foreground} weight="bold" />
                 </Pressable>
               </View>
@@ -183,14 +189,25 @@ export default function Compare() {
               {riffA.bpm && <Text style={[styles.metaText, { color: theme.mutedForeground }]}>{riffA.bpm} BPM</Text>}
               {riffA.type && <Text style={[styles.metaText, { color: colorA }]}>{riffA.type}</Text>}
 
-              {/* Mini waveform for slot A */}
-              {(riffA.waveform?.length ?? 0) > 0 && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, height: 24, marginTop: 8, opacity: 0.7, overflow: 'hidden' }}>
-                  {riffA.waveform!.slice(0, 24).map((lvl, i) => (
-                    <View key={i} style={{ width: 3, height: Math.max(2, (lvl < 0 ? (lvl + 160) / 160 : lvl) * 24), backgroundColor: colorA, borderRadius: 2 }} />
-                  ))}
-                </View>
-              )}
+            {statusA.duration > 0 && (
+  <View style={{ height: 3, backgroundColor: colorA + "30", borderRadius: 2, marginTop: 8 }}>
+    <View style={{ 
+      width: `${(statusA.currentTime / statusA.duration) * 100}%`, 
+      height: 3, 
+      backgroundColor: colorA, 
+      borderRadius: 2 
+    }} />
+  </View>
+)}
+
+{/* Mini waveform */}
+{(riffA.waveform?.length ?? 0) > 0 && (
+  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, height: 24, marginTop: 4, opacity: 0.7, overflow: 'hidden' }}>
+    {riffA.waveform!.slice(0, 24).map((lvl, i) => (
+      <View key={i} style={{ width: 3, height: Math.max(2, normalizeWaveform(lvl) * 24), backgroundColor: colorA, borderRadius: 2 }} />
+    ))}
+  </View>
+)}  
 
               <View style={{ flex: 1 }} />
               
@@ -198,7 +215,7 @@ export default function Compare() {
                 onPress={handlePlayA}
                 style={[styles.playButton, { backgroundColor: statusA.playing ? colorA : theme.input }]}
               >
-                {statusA.playing ? <Pause size={16} color="#fff" weight="fill" /> : <Play size={16} color={theme.foreground} weight="fill" />}
+                {statusA.playing ? <PauseIcon size={16} color="#fff" weight="fill" /> : <PlayIcon size={16} color={theme.foreground} weight="fill" />}
                 <Text style={[styles.playText, { color: statusA.playing ? "#fff" : theme.foreground }]}>
                   {statusA.playing ? "Pausar" : "Tocar"}
                 </Text>
@@ -228,15 +245,15 @@ export default function Compare() {
             shadowOpacity: riffB ? 0.2 : 0.1,
             shadowRadius: riffB ? 16 : 10,
           }]}
-          onPress={() => { if (!requirePro("compareRiffs")) setPickingFor("B"); }}
+          onPress={() => { if (requirePro("compareRiffs")) return; setPickingFor("B"); }}
         >
           {riffB ? (
             <View style={styles.slotContent}>
               <View style={styles.slotHeader}>
                 <Text style={{ fontSize: 10, color: colorB, fontWeight: '900', letterSpacing: 1 }}>IDEIA B</Text>
-                <Pressable onPress={() => { setRiffB(null); playerB.remove(); }} hitSlop={10} style={{ padding: 4, backgroundColor: theme.muted, borderRadius: 12 }}>
+                <Pressable onPress={() => { setRiffB(null); }} hitSlop={10} style={{ padding: 4, backgroundColor: theme.muted, borderRadius: 12 }}>
                   <X size={12} color={theme.foreground} weight="bold" />
-                </Pressable>
+                </Pressable>  
               </View>
               <Text style={[styles.riffName, { color: theme.foreground }]} numberOfLines={1}>{riffB.name}</Text>
               {riffB.bpm && <Text style={[styles.metaText, { color: theme.mutedForeground }]}>{riffB.bpm} BPM</Text>}
@@ -246,7 +263,7 @@ export default function Compare() {
               {(riffB.waveform?.length ?? 0) > 0 && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, height: 24, marginTop: 8, opacity: 0.7, overflow: 'hidden' }}>
                   {riffB.waveform!.slice(0, 24).map((lvl, i) => (
-                    <View key={i} style={{ width: 3, height: Math.max(2, (lvl < 0 ? (lvl + 160) / 160 : lvl) * 24), backgroundColor: colorB, borderRadius: 2 }} />
+                    <View key={i} style={{ width: 3, height: Math.max(2, normalizeWaveform(lvl) * 24), backgroundColor: colorB, borderRadius: 2 }} />
                   ))}
                 </View>
               )}
@@ -266,7 +283,7 @@ export default function Compare() {
           ) : (
             <View style={styles.emptySlot}>
               <View style={[styles.addIconCircle, { backgroundColor: theme.secondary + "15" }]}>
-                <Plus size={24} color={theme.secondary} weight="regular" />
+                <PlusIcon size={24} color={theme.secondary} weight="regular" />
               </View>
               <Text style={{ color: theme.mutedForeground, marginTop: 12, fontWeight: "600", fontSize: 13 }}>Selecionar B</Text>
             </View>
@@ -310,19 +327,55 @@ export default function Compare() {
 
         {/* COMPATIBILITY INDICATOR */}
         {riffA && riffB && (
-          <View style={[styles.compatibilityBanner, { backgroundColor: isBpmCompatible ? theme.primary + "20" : theme.input }]}>
-            {isBpmCompatible ? (
-              <>
-                <CheckCircle size={20} color={theme.primary} weight="fill" />
-                <Text style={{ color: theme.primary, fontWeight: 'bold', marginLeft: 8 }}>BPMs compatíveis!</Text>
-              </>
-            ) : (
-               <>
-                <Info size={20} color={theme.mutedForeground} weight="fill" />
-                <Text style={{ color: theme.mutedForeground, marginLeft: 8 }}>BPMs muito diferentes.</Text>
-              </>
-            )}
+          <View style={[styles.compatibilityBanner, { backgroundColor: compatibility.chipColor + "15", flexDirection: "column", alignItems: "stretch", gap: 12 }]}>
+            
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              {compatibility.score >= 80 ? (
+                <CheckCircle size={20} color={compatibility.chipColor} weight="fill" />
+              ) : (
+                <Info size={20} color={compatibility.chipColor} weight="fill" />
+              )}
+              <Text style={{ color: compatibility.chipColor, fontWeight: '900', fontSize: 16 }}>
+                {compatibility.score}% {compatibility.chipLabel}
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: "row", justifyContent: "space-between", backgroundColor: theme.card, padding: 12, borderRadius: 12 }}>
+              <View style={{ alignItems: "center", flex: 1 }}>
+                <Text style={{ fontSize: 10, color: theme.mutedForeground, fontWeight: "800", textTransform: "uppercase", marginBottom: 4 }}>BPM</Text>
+                <Text style={{ color: theme.foreground, fontSize: 14, fontWeight: "bold" }}>{compatibility.bpmLabel}</Text>
+              </View>
+              <View style={{ width: 1, backgroundColor: theme.border }} />
+              <View style={{ alignItems: "center", flex: 1 }}>
+                <Text style={{ fontSize: 10, color: theme.mutedForeground, fontWeight: "800", textTransform: "uppercase", marginBottom: 4 }}>TOM</Text>
+                <Text style={{ color: theme.foreground, fontSize: 14, fontWeight: "bold" }}>{compatibility.keyLabel}</Text>
+              </View>
+            </View>
           </View>
+        )}
+
+        {/* COMBINE PRO BUTTON */}
+        {riffA && riffB && (
+          <Pressable 
+            style={{ 
+              backgroundColor: theme.proPurple, 
+              paddingVertical: 14, 
+              borderRadius: 12, 
+              alignItems: 'center', 
+              marginTop: 12,
+              flexDirection: 'row',
+              justifyContent: 'center',
+              gap: 8,
+            }}
+            onPress={() => {
+              if (requirePro("autoCombine", "Combine duas ideias e gere uma versão pronta em 1 toque.")) return;
+              // TODO: V1 Combine Logic (Normalizar volume, Crossfade 300ms, A 2x, B 2x)
+              console.log("Combinando riffs...", riffA.name, riffB.name);
+            }}
+          >
+            <Crown size={18} color="#fff" weight="fill" />
+            <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}>Combinar Automaticamente</Text>
+          </Pressable>
         )}
 
         <Text style={[styles.subtitle, { color: theme.foreground, fontWeight: "bold", marginTop: 32, marginBottom: 12 }]}>
@@ -369,6 +422,10 @@ export default function Compare() {
               data={riffs}
               keyExtractor={item => item.id}
               contentContainerStyle={{ gap: 8 }}
+              initialNumToRender={8}
+              maxToRenderPerBatch={6}
+              windowSize={5}
+              removeClippedSubviews={true}
               renderItem={({ item }) => (
                 <Pressable
                   style={[styles.pickerItem, { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }]}

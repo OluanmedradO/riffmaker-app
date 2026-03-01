@@ -5,11 +5,14 @@ class AudioPreviewManager {
   private player: AudioPlayer | null = null;
   private updateInterval: any = null;
   private listeners: Set<(uri: string | null, isPlaying: boolean, currentTimeMs: number) => void> = new Set();
+  private isStartingPlayback: boolean = false;
 
   async play(uri: string, options: { loop?: boolean } = {}) {
     if (this.currentUri === uri && this.player) {
+      this.isStartingPlayback = true;
       this.player.play();
       this.notify(uri, true, this.player.currentTime * 1000);
+      setTimeout(() => { this.isStartingPlayback = false; }, 300);
       return;
     }
 
@@ -19,9 +22,11 @@ class AudioPreviewManager {
       this.player = createAudioPlayer(uri, { updateInterval: 100 });
       this.player.loop = !!options.loop;
       this.currentUri = uri;
+      this.isStartingPlayback = true;
       this.player.play();
       
       this.notify(uri, true, 0);
+      setTimeout(() => { this.isStartingPlayback = false; }, 300);
 
       this.updateInterval = setInterval(() => {
         if (!this.player) return;
@@ -32,7 +37,9 @@ class AudioPreviewManager {
              this.stop();
            }
         } else {
-           this.notify(this.currentUri, this.player.playing, this.player.currentTime * 1000);
+           if (!this.isStartingPlayback) {
+             this.notify(this.currentUri, this.player.playing, this.player.currentTime * 1000);
+           }
         }
       }, 100);
 

@@ -1,5 +1,4 @@
 /**
- * QuickRecordButton
  *
  * Tap  → navigates to /create (normal flow)
  * Hold → records inline; release auto-saves; < 1s discards
@@ -8,29 +7,34 @@
 import { showToast } from "@/components/AppToast";
 import { useTheme } from "@/components/ThemeProvider";
 import { useHaptic } from "@/src/hooks/useHaptic";
+import { useTranslation } from "@/src/i18n";
 import { addRiff } from "@/src/storage/riffs";
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from "expo-audio";
 import { Microphone } from "phosphor-react-native";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, Easing, StyleSheet, Text, View } from "react-native";
+import { useCallback, useRef, useState } from "react";
+import { Animated, DeviceEventEmitter, StyleSheet, Text, View } from "react-native";
 import { LongPressGestureHandler, State } from "react-native-gesture-handler";
 
 type Props = {
   onTap: () => void;
   onQuickSave?: () => void;
+  style?: any;
+  buttonStyle?: any;
+  iconSize?: number;
 };
 
-function generateQuickName(): string {
+function generateQuickName(t: any): string {
   const now = new Date();
   const day = now.getDate().toString().padStart(2, "0");
   const month = (now.getMonth() + 1).toString().padStart(2, "0");
   const hours = now.getHours().toString().padStart(2, "0");
   const mins = now.getMinutes().toString().padStart(2, "0");
-  return `Ideia ${day}/${month} ${hours}:${mins}`;
+  return t("idea.default_name", { date: `${day}/${month} ${hours}:${mins}` });
 }
 
-export function QuickRecordButton({ onTap, onQuickSave }: Props) {
+export function QuickRecordButton({ onTap, onQuickSave, style, buttonStyle, iconSize = 24 }: Props) {
   const theme = useTheme();
+  const { t } = useTranslation();
   const { triggerHaptic } = useHaptic();
 
   const audioRecorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: false });
@@ -47,43 +51,23 @@ export function QuickRecordButton({ onTap, onQuickSave }: Props) {
 
   // Animations
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const ringAnim = useRef(new Animated.Value(0)).current;
-  const pulseLoop = useRef<Animated.CompositeAnimation | null>(null);
-
-  // Idle pulse (always)
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.05, duration: 2000, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    pulseLoop.current = loop;
-    return () => loop.stop();
-  }, []);
 
   function startRecordingAnimation() {
-    pulseLoop.current?.stop();
-    pulseAnim.setValue(1);
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(ringAnim, { toValue: 1, duration: 600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(ringAnim, { toValue: 0.6, duration: 600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])
-    ).start();
+    pulseAnim.stopAnimation();
+    Animated.spring(pulseAnim, {
+      toValue: 1.35,
+      friction: 5,
+      useNativeDriver: true,
+    }).start();
   }
 
   function stopRecordingAnimation() {
-    ringAnim.setValue(0);
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.05, duration: 2000, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    pulseLoop.current = loop;
+    pulseAnim.stopAnimation();
+    Animated.spring(pulseAnim, {
+      toValue: 1,
+      friction: 5,
+      useNativeDriver: true,
+    }).start();
   }
 
   async function doStartRecording() {
@@ -114,12 +98,11 @@ export function QuickRecordButton({ onTap, onQuickSave }: Props) {
       setIsRecording(true);
       setSeconds(0);
       timerRef.current = setInterval(() => {
-        secondsRef.current += 1;
-        setSeconds(secondsRef.current);
-      }, 1000);
+        const elapsedSecs = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        secondsRef.current = elapsedSecs;
+        setSeconds(elapsedSecs);
+      }, 250);
 
-      triggerHaptic("heavy");
-      startRecordingAnimation();
       return true;
     } catch (e) {
       console.error("[QuickRecord] start error:", e);
@@ -148,13 +131,13 @@ export function QuickRecordButton({ onTap, onQuickSave }: Props) {
 
     // Discard if too short
     if (elapsed < 1 || secondsRef.current < 1) {
-      showToast({ type: "info", message: "Muito curto — gravação descartada." });
+      showToast({ type: "info", message: t("quick.too_short") });
       return;
     }
 
     const uri = audioRecorder.uri;
     if (!uri) {
-      showToast({ type: "error", message: "Sem URI de áudio — gravação perdida." });
+      showToast({ type: "error", message: t("quick.no_uri") });
       return;
     }
 
@@ -162,7 +145,7 @@ export function QuickRecordButton({ onTap, onQuickSave }: Props) {
       const finalDuration = Math.max(secondsRef.current * 1000, 1000);
       await addRiff({
         id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-        name: generateQuickName(),
+        name: generateQuickName(t),
         createdAt: Date.now(),
         duration: finalDuration,
         audioUri: uri,
@@ -170,7 +153,8 @@ export function QuickRecordButton({ onTap, onQuickSave }: Props) {
       });
 
       triggerHaptic("success");
-      showToast({ type: "success", message: "Ideia salva!", duration: 2000 });
+      showToast({ type: "success", message: t("quick.saved"), duration: 2000 });
+      DeviceEventEmitter.emit("riff_created");
       onQuickSave?.();
     } catch (e: any) {
       console.error("[QuickRecord] save error:", e);
@@ -181,7 +165,10 @@ export function QuickRecordButton({ onTap, onQuickSave }: Props) {
   const handleGesture = useCallback(async (event: any) => {
     const { nativeEvent } = event;
 
-    if (nativeEvent.state === State.ACTIVE) {
+    if (nativeEvent.state === State.BEGAN) {
+      triggerHaptic("heavy");
+      startRecordingAnimation();
+    } else if (nativeEvent.state === State.ACTIVE) {
       // Long press fired — start recording
       await doStartRecording();
     } else if (
@@ -189,6 +176,8 @@ export function QuickRecordButton({ onTap, onQuickSave }: Props) {
       nativeEvent.state === State.CANCELLED ||
       nativeEvent.state === State.FAILED
     ) {
+      triggerHaptic("heavy");
+      stopRecordingAnimation();
       if (isRecordingRef.current) {
         // Was recording — stop and save
         await doStopAndSave();
@@ -202,42 +191,28 @@ export function QuickRecordButton({ onTap, onQuickSave }: Props) {
     }
   }, [onTap]);
 
-  const ringOpacity = ringAnim;
-  const ringScale = ringAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.4] });
-
   return (
     <LongPressGestureHandler
       onHandlerStateChange={handleGesture}
       minDurationMs={300}
     >
-      <Animated.View style={[styles.fabWrapper, { transform: [{ scale: pulseAnim }] }]}>
-        {/* Pulsing ring when recording */}
-        {isRecording && (
-          <Animated.View
-            style={[
-              styles.recordingRing,
-              {
-                borderColor: "#dc2626",
-                opacity: ringOpacity,
-                transform: [{ scale: ringScale }],
-              },
-            ]}
-          />
-        )}
+      <Animated.View style={[style ? style : styles.fabWrapper, { transform: [{ scale: pulseAnim }] }]}>
         <View
           style={[
-            styles.fab,
-            { backgroundColor: isRecording ? "#dc2626" : theme.primary },
+            buttonStyle || styles.fab,
+            { backgroundColor: isRecording ? "#dc2626" : theme.accent },
           ]}
         >
           <Microphone
-            size={24}
+            size={iconSize}
             color={theme.primaryForeground}
             weight={isRecording ? "fill" : "fill"}
           />
         </View>
         {isRecording && (
-          <Text style={styles.timer}>{seconds}s</Text>
+          <View style={styles.timerBadge}>
+            <Text style={styles.timer}>{seconds}s</Text>
+          </View>
         )}
       </Animated.View>
     </LongPressGestureHandler>
@@ -251,13 +226,6 @@ const styles = StyleSheet.create({
     right: 24,
     alignItems: "center",
   },
-  recordingRing: {
-    position: "absolute",
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 3,
-  },
   fab: {
     width: 56,
     height: 56,
@@ -270,10 +238,17 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 8,
   },
+  timerBadge: {
+    position: "absolute",
+    top: -28,
+    backgroundColor: "#dc2626",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
   timer: {
-    marginTop: 6,
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#dc2626",
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#fff",
   },
 });

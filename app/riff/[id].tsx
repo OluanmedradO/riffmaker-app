@@ -1,51 +1,54 @@
 import { IdeaForm } from "@/components/IdeaForm";
-import { RiffRecorder } from "@/components/RiffRecorder";
+import { MusicalCompatibility } from "@/components/MusicalCompatibility";
+import { RiffRecorder } from "@/components/recorder/RiffRecorder";
 import { Screen } from "@/components/Screen";
 import { StructureTimeline } from "@/components/StructureTimeline";
 import { useTheme } from "@/components/ThemeProvider";
 import { LoadingSpinner } from "@/src/components/LoadingSpinner";
+import { SaveStatusIndicator } from "@/src/components/SaveStatusIndicator";
 import { APP_CONFIG } from "@/src/constants/app";
 import { useHaptic } from "@/src/hooks/useHaptic";
 import { useProGate } from "@/src/hooks/useProGate";
+import { useTranslation } from "@/src/i18n";
 import { getProjects } from "@/src/storage/projects";
 import { duplicateAsNewVersion, duplicateIdea, getRiffs, updateRiff } from "@/src/storage/riffs";
 import { Project } from "@/src/types/project";
 import { Riff } from "@/src/types/riff";
-import { detectSmartBPM } from "@/src/utils/audioProcessing";
 import { exportRiffStructure } from "@/src/utils/exportUtils";
 import { formatDate } from "@/src/utils/formatters";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
-import { CaretDown, CaretLeft, Check, Copy, Export, Plus, ShareNetwork, Warning, X } from "phosphor-react-native";
+import { CaretDown, CaretLeft, Check, Copy, Export, NotePencil, Plus, ShareNetwork, X } from "phosphor-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  BackHandler,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View
+    Alert,
+    Animated,
+    BackHandler,
+    Modal,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    View
 } from "react-native";
 
-function getDefaultRiffName(): string {
+function getDefaultRiffName(t: any): string {
   const now = new Date();
   const day = now.getDate().toString().padStart(2, "0");
   const month = (now.getMonth() + 1).toString().padStart(2, "0");
   const hours = now.getHours().toString().padStart(2, "0");
   const mins = now.getMinutes().toString().padStart(2, "0");
-  return `Ideia ${day}/${month} ${hours}:${mins}`;
+  const dateStr = `${day}/${month} ${hours}:${mins}`;
+  return t("idea.default_name", { date: dateStr });
 }
 
 export default function EditRiff() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const theme = useTheme();
+  const { t } = useTranslation();
   const { triggerHaptic } = useHaptic();
   const requirePro = useProGate();
 
@@ -55,6 +58,7 @@ export default function EditRiff() {
   const saveOpacity = useRef(new Animated.Value(0)).current;
   const saveScale = useRef(new Animated.Value(0.9)).current;
   const [projects, setProjects] = useState<Project[]>([]);
+  const [allRiffs, setAllRiffs] = useState<Riff[]>([]);
   const [showVersionsModal, setShowVersionsModal] = useState(false);
   const [snapToBPM, setSnapToBPM] = useState(false);
   const [versions, setVersions] = useState<Riff[]>([]);
@@ -80,15 +84,16 @@ export default function EditRiff() {
         if (found && isMounted.current) {
           setForm(found);
         } else if (!found) {
-          Alert.alert("Erro", "Ideia não encontrada.");
+          Alert.alert(t("idea.error"), t("idea.not_found"));
         }
         const allProjects = await getProjects();
         if (isMounted.current) {
           setProjects(allProjects);
+          setAllRiffs(riffs);
         }
 
       } catch (error) {
-        Alert.alert("Erro", "Não foi possível carregar a ideia.");
+        Alert.alert(t("idea.error"), t("idea.load_failed"));
       } finally {
         if (isMounted.current) setLoading(false);
       }
@@ -166,11 +171,11 @@ export default function EditRiff() {
       const onBackPress = () => {
         if (recorderRef.current?.isRecording()) {
           Alert.alert(
-            "Descartar Gravação?",
-            "Você tem uma gravação em andamento. Deseja mesmo sair?",
+            t("idea.discard_title"),
+            t("idea.discard_recording"),
             [
-              { text: "Cancelar", style: "cancel" },
-              { text: "Sair e Descartar", style: "destructive", onPress: () => { router.back(); } }
+              { text: t("cancel"), style: "cancel" },
+              { text: t("idea.discard_action"), style: "destructive", onPress: () => { router.back(); } }
             ]
           );
           return true; // prevent default behavior
@@ -185,32 +190,32 @@ export default function EditRiff() {
 
   async function handleShare() {
     if (!form?.audioUri) {
-      Alert.alert("Aviso", "Não há áudio gravado para este riff.");
+      Alert.alert(t("idea.warning"), t("idea.no_audio_share"));
       return;
     }
 
     try {
       const isAvailable = await Sharing.isAvailableAsync();
       if (!isAvailable) {
-        Alert.alert("Erro", "O compartilhamento não está disponível.");
+        Alert.alert(t("idea.error"), t("idea.share_unavailable"));
         return;
       }
       
       await Sharing.shareAsync(form.audioUri, {
-        dialogTitle: `Compartilhar ${form.name}`,
+        dialogTitle: `${t("idea.share_title")} ${form.name}`,
         mimeType: "audio/mp4",
       });
     } catch (error) {
       console.error(error);
-      Alert.alert("Erro", "Falha ao compartilhar o áudio.");
+      Alert.alert(t("idea.error"), t("idea.share_failed"));
     }
   }
 
   async function handleDuplicate() {
-    Alert.alert("Duplicar Ideia", "Como deseja duplicar?", [
-      { text: "Cancelar", style: "cancel" },
+    Alert.alert(t("idea.duplicate_title"), t("idea.duplicate_desc"), [
+      { text: t("cancel"), style: "cancel" },
       {
-        text: "Nova Versão",
+        text: t("idea.new_version"),
         onPress: async () => {
           try {
             setLoading(true);
@@ -219,18 +224,18 @@ export default function EditRiff() {
               triggerHaptic("success");
               router.replace(`/riff/${duplicated.id}`);
             } else {
-              Alert.alert("Erro", "Não foi possível criar nova versão.");
+              Alert.alert(t("idea.error"), t("idea.version_failed"));
               setLoading(false);
             }
           } catch (e) {
             console.error(e);
-            Alert.alert("Erro", "Falha ao criar versão.");
+            Alert.alert(t("idea.error"), t("idea.version_error"));
             setLoading(false);
           }
         }
       },
       {
-        text: "Cópia Independente",
+        text: t("idea.independent_copy"),
         onPress: async () => {
           try {
             setLoading(true);
@@ -239,12 +244,12 @@ export default function EditRiff() {
               triggerHaptic("success");
               router.replace(`/riff/${duplicated.id}`);
             } else {
-              Alert.alert("Erro", "Não foi possível duplicar.");
+              Alert.alert(t("idea.error"), t("idea.duplicate_failed"));
               setLoading(false);
             }
           } catch (e) {
             console.error(e);
-            Alert.alert("Erro", "Falha ao duplicar.");
+            Alert.alert(t("idea.error"), t("idea.duplicate_error"));
             setLoading(false);
           }
         }
@@ -271,7 +276,7 @@ export default function EditRiff() {
 
     const newMarker = {
       id: Math.random().toString(36).substring(7),
-      label: `Marcação ${(form.markers?.length || 0) + 1}`,
+      label: `${t("idea.marker_prefix")} ${(form.markers?.length || 0) + 1}`,
       timestampMs: ms,
     };
 
@@ -311,7 +316,7 @@ export default function EditRiff() {
       <>
         <Stack.Screen options={{ headerShown: false }} />
         <Screen background={theme.background}>
-          <LoadingSpinner message="Carregando riff..." />
+          <LoadingSpinner message={t("idea.loading")} />
         </Screen>
       </>
     );
@@ -324,7 +329,7 @@ export default function EditRiff() {
         <Screen background={theme.background}>
           <View style={styles.empty}>
             <Text style={[styles.emptyTitle, { color: theme.primary }]}>
-              Ideia não encontrada
+              {t("idea.not_found")}
             </Text>
           </View>
         </Screen>
@@ -334,7 +339,7 @@ export default function EditRiff() {
 
   // Auto-save on navigate away: ensure name fallback + save
   async function forceSaveNow(currentForm: Riff) {
-    const finalName = currentForm.name?.trim() || getDefaultRiffName();
+    const finalName = currentForm.name?.trim() || getDefaultRiffName(t);
     try {
       await updateRiff(currentForm.id, { ...currentForm, name: finalName, updatedAt: Date.now() });
     } catch {}
@@ -359,39 +364,7 @@ export default function EditRiff() {
           </Pressable>
           
           <View style={styles.headerRight}>
-              <Animated.View 
-                style={[styles.saveIndicator, { opacity: saveOpacity, transform: [{ scale: saveScale }] }]}
-                pointerEvents={saving === 'error' ? 'auto' : 'none'}
-              >
-                {saving === "saving" && (
-                  <>
-                    <ActivityIndicator size={14} color={theme.mutedForeground} />
-                    <Text style={[styles.savingText, { color: theme.mutedForeground }]}>
-                      Salvando...
-                    </Text>
-                  </>
-                )}
-                {saving === "saved" && (
-                  <>
-                    <Check size={14} color="#22c55e" weight="bold" />
-                    <Text style={[styles.savingText, { color: "#22c55e" }]}>
-                      Salvo
-                    </Text>
-                  </>
-                )}
-                {saving === "error" && (
-                  <Pressable 
-                    onPress={triggerSave}
-                    hitSlop={12}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#2e0f0f', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: '#ef444480' }}
-                  >
-                    <Warning size={14} color="#ef4444" weight="fill" />
-                    <Text style={[styles.savingText, { color: "#ef4444" }]}>
-                      Erro · Tentar novamente
-                    </Text>
-                  </Pressable>
-                )}
-              </Animated.View>
+              <SaveStatusIndicator status={saving} />
               {form?.audioUri ? (
                 <>
                   <Pressable onPress={() => { if (!requirePro("advancedExport")) exportRiffStructure(form); }} style={{ marginLeft: 16 }} hitSlop={8}>
@@ -403,6 +376,20 @@ export default function EditRiff() {
                   <Pressable onPress={handleShare} style={{ marginLeft: 16 }} hitSlop={8}>
                     <ShareNetwork size={24} color={theme.primary} />
                   </Pressable>
+                  <Pressable 
+                    onPress={() => {
+                      setForm(prev => prev ? { ...prev, draft: !prev.draft } : prev);
+                      triggerHaptic("light");
+                    }} 
+                    style={{ marginLeft: 16 }} 
+                    hitSlop={8}
+                  >
+                    <NotePencil 
+                      size={24} 
+                      color={form.draft ? "#eab308" : theme.mutedForeground} 
+                      weight={form.draft ? "fill" : "regular"} 
+                    />
+                  </Pressable>
                 </>
               ) : null}
           </View>
@@ -410,32 +397,46 @@ export default function EditRiff() {
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 20 }}>
 
-          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 32, marginTop: 12 }}>
-            <TextInput
-              placeholder="Nome da ideia"
-              placeholderTextColor={theme.mutedForeground}
-              value={form.name}
-              onChangeText={(text) =>
-                setForm((prev) => (prev ? { ...prev, name: text } : prev))
-              }
-              maxLength={APP_CONFIG.MAX_RIFF_TITLE_LENGTH}
-              style={{
-                fontSize: 38,
-                fontWeight: "900",
-                color: theme.foreground,
-                paddingHorizontal: 0,
-                flex: 1,
-              }}
-            />
-            {form.versionNumber || versions.length > 1 ? (
-              <Pressable 
-                onPress={() => versions.length > 1 && setShowVersionsModal(true)}
-                style={{ backgroundColor: theme.primary + "20", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginRight: 8, flexDirection: "row", alignItems: "center" }}
-              >
-                <Text style={{ color: theme.primary, fontWeight: "bold", fontSize: 13 }}>v{form.versionNumber || 1}</Text>
-                {versions.length > 1 && <CaretDown size={12} color={theme.primary} weight="bold" style={{ marginLeft: 6 }} />}
-              </Pressable>
-            ) : null}
+          <View style={{ marginBottom: 32, marginTop: 12 }}>
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <TextInput
+                placeholder={t("idea.name_placeholder")}
+                placeholderTextColor={theme.mutedForeground}
+                value={form.name}
+                onChangeText={(text) =>
+                  setForm((prev) => (prev ? { ...prev, name: text } : prev))
+                }
+                maxLength={APP_CONFIG.MAX_RIFF_TITLE_LENGTH}
+                style={{
+                  fontSize: 28,
+                  fontWeight: "900",
+                  color: theme.foreground,
+                  paddingHorizontal: 4,
+                  marginHorizontal: -4,
+                  flex: 1,
+                }}
+              />
+              {form.versionNumber || versions.length > 1 ? (
+                <Pressable 
+                  onPress={() => versions.length > 1 && setShowVersionsModal(true)}
+                  style={{ backgroundColor: theme.primary + "20", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginLeft: 8, flexDirection: "row", alignItems: "center" }}
+                >
+                  <Text style={{ color: theme.primary, fontWeight: "bold", fontSize: 13 }}>v{form.versionNumber || 1}</Text>
+                  {versions.length > 1 && <CaretDown size={12} color={theme.primary} weight="bold" style={{ marginLeft: 6 }} />}
+                </Pressable>
+              ) : null}
+            </View>
+            {form.draft && (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8, paddingHorizontal: 4 }}>
+                <View style={{ backgroundColor: "#eab30820", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 99, borderWidth: 1, borderColor: "#eab30850", flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <NotePencil size={12} color="#eab308" weight="fill" />
+                  <Text style={{ color: "#eab308", fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.5 }}>Rascunho</Text>
+                </View>
+              </View>
+            )}
+            <Text style={{ color: theme.mutedForeground, fontSize: 13, marginTop: 4, paddingHorizontal: 4 }}>
+              {new Date(form.createdAt).toLocaleDateString()} • {new Date(form.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </Text>
           </View>
 
           {/* VERSIONS MODAL */}
@@ -443,7 +444,7 @@ export default function EditRiff() {
             <Pressable style={styles.modalOverlay} onPress={() => setShowVersionsModal(false)}>
                <Pressable style={[styles.modalContent, { backgroundColor: theme.background }]}>
                   <View style={styles.modalHeader}>
-                    <Text style={[styles.modalTitle, { color: theme.foreground }]}>Histórico de Versões</Text>
+                    <Text style={[styles.modalTitle, { color: theme.foreground }]}>{t("idea.version_history")}</Text>
                     <Pressable onPress={() => setShowVersionsModal(false)}>
                       <X size={24} color={theme.mutedForeground} weight="bold" />
                     </Pressable>
@@ -490,7 +491,7 @@ export default function EditRiff() {
             elevation: 6
           }]}>
             <Text style={[styles.coreSectionTitle, { color: theme.primary }]}>
-              Gravação de Áudio
+              {t("idea.audio_recording")}
             </Text>
             <RiffRecorder
               ref={recorderRef}
@@ -499,17 +500,12 @@ export default function EditRiff() {
               loopStart={form.loopStart}
               loopEnd={form.loopEnd}
               loopRangeActive={loopRangeActive}
+              initialLevels={form.waveform}
+              bpm={form.bpm}
+              musicalKey={form.key || form.detectedKey}
               onChange={(data) => {
-                let rpmResult = null;
-                if (data.levels && data.levels.length > 20 && data.duration > 0) {
-                  rpmResult = detectSmartBPM(data.levels, data.duration);
-                }
-
                 setForm((prev) => {
                   if (!prev) return prev;
-                  // Auto-update BPM if we don't have a manual one and we detected a new one
-                  const shouldUpdateBpm = prev.bpmSource !== "manual" && rpmResult != null;
-                  
                   return {
                     ...prev,
                     audioUri: data.uri || "",
@@ -517,10 +513,6 @@ export default function EditRiff() {
                     waveform: data.uri ? data.levels : prev.waveform,
                     averageRms: data.uri ? data.averageRms : prev.averageRms,
                     energyLevel: data.uri ? data.energyLevel : prev.energyLevel,
-                    detectedBpm: rpmResult ? rpmResult.detectedBpm : prev.detectedBpm,
-                    suggestedBpms: rpmResult ? rpmResult.suggestedBpms : prev.suggestedBpms,
-                    bpm: shouldUpdateBpm && rpmResult ? rpmResult.detectedBpm : prev.bpm,
-                    bpmSource: shouldUpdateBpm ? "auto" : prev.bpmSource,
                   };
                 });
               }}
@@ -530,7 +522,6 @@ export default function EditRiff() {
               <View style={{ marginTop: 12, flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <Pressable
                   onPress={() => {
-                    if (requirePro("loopMode")) return;
                     const pos = recorderRef.current?.getCurrentPosition() ?? 0;
                     setForm(prev => prev ? { ...prev, loopStart: pos } : prev);
                     triggerHaptic("light");
@@ -538,12 +529,11 @@ export default function EditRiff() {
                   style={[{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: theme.input, borderWidth: 1, borderColor: theme.border }]}
                 >
                   <Text style={{ color: theme.foreground, fontSize: 12, fontWeight: "600" }}>
-                    ↘ Definir In{form.loopStart != null ? ` (${(form.loopStart / 1000).toFixed(1)}s)` : ""}
+                    {t("idea.set_in")}{form.loopStart != null ? ` (${(form.loopStart / 1000).toFixed(1)}s)` : ""}
                   </Text>
                 </Pressable>
                 <Pressable
                   onPress={() => {
-                    if (requirePro("loopMode")) return;
                     const pos = recorderRef.current?.getCurrentPosition() ?? 0;
                     setForm(prev => prev ? { ...prev, loopEnd: pos } : prev);
                     triggerHaptic("light");
@@ -551,7 +541,7 @@ export default function EditRiff() {
                   style={[{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: theme.input, borderWidth: 1, borderColor: theme.border }]}
                 >
                   <Text style={{ color: theme.foreground, fontSize: 12, fontWeight: "600" }}>
-                    ↗ Definir Out{form.loopEnd != null ? ` (${(form.loopEnd / 1000).toFixed(1)}s)` : ""}
+                    {t("idea.set_out")}{form.loopEnd != null ? ` (${(form.loopEnd / 1000).toFixed(1)}s)` : ""}
                   </Text>
                 </Pressable>
                 {form.loopStart != null && form.loopEnd != null && (
@@ -568,7 +558,7 @@ export default function EditRiff() {
                     }]}
                   >
                     <Text style={{ color: loopRangeActive ? theme.primary : theme.foreground, fontSize: 12, fontWeight: "700" }}>
-                      ↺ Loop Região
+                      {t("idea.loop_region")}
                     </Text>
                   </Pressable>
                 )}
@@ -580,7 +570,7 @@ export default function EditRiff() {
                     }}
                     style={{ padding: 8 }}
                   >
-                    <Text style={{ color: theme.mutedForeground, fontSize: 11 }}>Limpar</Text>
+                    <Text style={{ color: theme.mutedForeground, fontSize: 11 }}>{t("idea.clear")}</Text>
                   </Pressable>
                 )}
               </View>
@@ -605,7 +595,7 @@ export default function EditRiff() {
             <View style={{ marginBottom: 20 }}>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <Text style={[styles.label, { color: theme.primary, marginTop: 0, marginBottom: 0 }]}>
-                  Marcadores ({form.markers?.length || 0})
+                  {t("idea.markers")} ({form.markers?.length || 0})
                 </Text>
                 <Pressable
                   accessibilityRole="button"
@@ -613,13 +603,13 @@ export default function EditRiff() {
                   style={{ flexDirection: "row", alignItems: "center", backgroundColor: theme.primary + "20", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}
                 >
                   <Plus size={12} color={theme.primary} weight="bold" style={{ marginRight: 6 }} />
-                  <Text style={{ color: theme.primary, fontSize: 12, fontWeight: "bold" }}>Marcar pos. atual</Text>
+                  <Text style={{ color: theme.primary, fontSize: 12, fontWeight: "bold" }}>{t("idea.mark_current")}</Text>
                 </Pressable>
               </View>
 
               {form.bpm ? (
                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12, paddingHorizontal: 4 }}>
-                   <Text style={{ color: theme.foreground, fontSize: 14 }}>Snap to BPM (Quantização)</Text>
+                   <Text style={{ color: theme.foreground, fontSize: 14 }}>{t("idea.snap_bpm")}</Text>
                    <Switch 
                      value={snapToBPM} 
                      onValueChange={setSnapToBPM} 
@@ -653,7 +643,7 @@ export default function EditRiff() {
                         <TextInput
                           value={marker.label}
                           onChangeText={(txt) => handleUpdateMarker(marker.id, txt)}
-                          placeholder="Nome do marcador"
+                          placeholder={t("idea.marker_name")}
                           placeholderTextColor={theme.mutedForeground}
                           style={{ flex: 1, color: theme.foreground, fontSize: 14 }}
                         />
@@ -678,6 +668,16 @@ export default function EditRiff() {
               }
             }}
           />
+
+          {/* Musical Compatibility Indicator */}
+          {(form.key || form.detectedKey || form.bpm) && allRiffs.length > 1 && (
+            <View style={{ paddingHorizontal: 20, marginBottom: 24 }}>
+              <MusicalCompatibility
+                currentRiff={form}
+                otherRiffs={allRiffs}
+              />
+            </View>
+          )}
 
         </ScrollView>
       </Screen>

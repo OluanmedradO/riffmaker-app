@@ -1,8 +1,7 @@
 import { CustomTabBar } from "@/components/CustomTabBar";
 import { useTheme } from "@/components/ThemeProvider";
 import { Tabs } from "expo-router";
-import { ArrowsLeftRight, FolderSimple, Gear, Waveform } from "phosphor-react-native";
-
+import { ArrowsLeftRightIcon, FolderSimpleIcon, GearIcon, WaveformIcon } from "phosphor-react-native";
 export default function TabsLayout() {
   const theme = useTheme();
   return (
@@ -15,9 +14,9 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Ideias",
+          title: "Idéias",
           tabBarIcon: ({ color }) => (
-            <Waveform weight="regular" size={24} color={color} />
+            <WaveformIcon weight="regular" size={24} color={color} />
           ),
         }}
       />
@@ -26,7 +25,7 @@ export default function TabsLayout() {
         options={{
           title: "Projetos",
           tabBarIcon: ({ color }) => (
-            <FolderSimple weight="regular" size={24} color={color} />
+            <FolderSimpleIcon weight="regular" size={24} color={color} />
           ),
         }}
       />
@@ -35,7 +34,7 @@ export default function TabsLayout() {
         options={{
           title: "Comparar",
           tabBarIcon: ({ color }) => (
-            <ArrowsLeftRight weight="regular" size={24} color={color} />
+            <ArrowsLeftRightIcon weight="regular" size={24} color={color} />
           ),
         }}
       />
@@ -44,7 +43,7 @@ export default function TabsLayout() {
         options={{
           title: "Configurações",
           tabBarIcon: ({ color }) => (
-            <Gear weight="regular" size={24} color={color} />
+            <GearIcon weight="regular" size={24} color={color} />
           ),
         }}
       />

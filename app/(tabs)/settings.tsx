@@ -1,21 +1,22 @@
+import { AnimatedHeaderTitle } from "@/components/AnimatedHeaderTitle";
 import { showToast } from "@/components/AppToast";
 import { Screen } from "@/components/Screen";
 import { useTheme } from "@/components/ThemeProvider";
+import { useProGate } from "@/src/hooks/useProGate";
 import { useSecretTap } from "@/src/hooks/useSecretTap";
+import { useTranslation } from "@/src/i18n";
 import { exportFullBackup, restoreFullBackup } from "@/src/utils/backup";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system/legacy";
 import { useRouter } from "expo-router";
 import {
-    ArrowCounterClockwise,
     CaretRight,
     Crown,
     DownloadSimple,
     HourglassHigh,
     Info,
-    Package,
     ShieldCheck,
-    Trash,
+    Trash
 } from "phosphor-react-native";
 import { useEffect, useState } from "react";
 import {
@@ -33,10 +34,12 @@ import {
 export default function Settings() {
   const theme = useTheme();
   const router = useRouter();
+  const { t, language, setLanguage } = useTranslation();
   const [clearing, setClearing] = useState(false);
   const [countdownEnabled, setCountdownEnabled] = useState(false);
   const [backupLoading, setBackupLoading] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState(false);
+  const requirePro = useProGate();
 
   useEffect(() => {
     AsyncStorage.getItem("@countdown_enabled").then((val) => {
@@ -60,10 +63,10 @@ export default function Settings() {
     try {
       await AsyncStorage.clear();
       setShowClearModal(false);
-      Alert.alert("Sucesso", "Todos os dados foram removidos.");
+      Alert.alert(t("settings.success_title"), t("settings.clear_success"));
       router.back();
     } catch (error) {
-      Alert.alert("Erro", "Não foi possível limpar os dados.");
+      Alert.alert(t("project.error"), t("settings.clear_error"));
     } finally {
       setClearing(false);
     }
@@ -71,8 +74,8 @@ export default function Settings() {
 
   function handlePrivacyPolicy() {
     Alert.alert(
-      "Política de Privacidade",
-      "O Riff Maker não coleta ou compartilha seus dados. Tudo fica armazenado localmente no seu dispositivo.",
+      t("settings.privacy_title"),
+      t("settings.privacy_body"),
     );
   }
 
@@ -80,34 +83,36 @@ export default function Settings() {
     try {
       await exportFullBackup();
     } catch (e) {
-      Alert.alert("Erro", "Falha ao exportar backup.");
+      Alert.alert(t("project.error"), t("settings.export_error"));
     }
   }
 
   async function handleExportFullBackup() {
+    if (requirePro("fullBackup", t("settings.pro_backup"))) return;
     setBackupLoading(true);
     try {
       const result = await exportFullBackup();
       if (result.success) {
         showToast({ type: "success", message: result.message });
       } else {
-        Alert.alert("Backup Falhou", result.message);
+        Alert.alert(t("settings.backup_failed"), result.message);
       }
     } catch (e: any) {
-      Alert.alert("Erro", e?.message ?? "Falha ao exportar backup completo.");
+      Alert.alert(t("project.error"), e?.message ?? t("settings.export_error"));
     } finally {
       setBackupLoading(false);
     }
   }
 
   async function handleRestoreBackup() {
+    if (requirePro("fullBackup", t("settings.pro_restore"))) return;
     Alert.alert(
-      "Restaurar Backup",
-      "Escolha o arquivo backup.json. Os dados atuais serão sobrescritos.\n\nNo seu gerenciador de arquivos, localize o backup.json exportado e forneça o caminho.",
+      t("settings.restore_backup_title"),
+      t("settings.restore_backup_body"),
       [
-        { text: "Cancelar", style: "cancel" },
+        { text: t("recorder.cancel"), style: "cancel" },
         {
-          text: "Continuar",
+          text: t("settings.continue"),
           onPress: () => {
             // On Android: use SAF read to pick JSON file
             _pickAndRestore();
@@ -123,7 +128,7 @@ export default function Settings() {
       // Use SAF to request read permission and pick JSON file
       const result = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
       if (!result.granted) {
-        Alert.alert("Permissão Negada", "Acesso à pasta cancelado.");
+        Alert.alert(t("settings.permission_denied_title"), t("settings.permission_denied_body"));
         return;
       }
 
@@ -132,7 +137,7 @@ export default function Settings() {
       const backupFileUri = files.find((f) => f.endsWith("backup.json") || f.includes("riffmaker_backup"));
 
       if (!backupFileUri) {
-        Alert.alert("Arquivo não encontrado", "Não encontrei um arquivo backup.json na pasta selecionada. Certifique-se de selecionar a pasta onde foi salvo o backup.");
+        Alert.alert(t("settings.file_not_found"), t("settings.file_not_found_body"));
         return;
       }
 
@@ -145,10 +150,10 @@ export default function Settings() {
       if (restoreResult.success) {
         showToast({ type: "success", message: restoreResult.message });
       } else {
-        Alert.alert("Restauração Falhou", restoreResult.message);
+        Alert.alert(t("settings.restore_failed"), restoreResult.message);
       }
     } catch (e: any) {
-      Alert.alert("Erro", e?.message ?? "Falha ao restaurar backup.");
+      Alert.alert(t("project.error"), e?.message ?? t("settings.restore_error"));
     } finally {
       setRestoreLoading(false);
     }
@@ -156,18 +161,20 @@ export default function Settings() {
 
   const handleSecretTap = useSecretTap(() => router.push("/dev"), 5, 2500);
 
+  function toggleLanguage() {
+    setLanguage(language === "pt-BR" ? "en-US" : "pt-BR");
+  }
+
   return (
     <Screen background={theme.background}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
       <Pressable onPress={handleSecretTap}>
-        <Text
-          style={[
-            styles.title,
-            { color: theme.foreground, marginTop: 16 },
-          ]}
-        >
-          Configurações
-        </Text>
+        <AnimatedHeaderTitle
+          title={t("settings.title")}
+          fontSize={24}
+          fontWeight="900"
+          style={{ marginTop: 16, marginBottom: 8 }}
+        />
       </Pressable>
 
       <Text
@@ -176,13 +183,13 @@ export default function Settings() {
           { color: theme.mutedForeground, marginTop: 24 },
         ]}
       >
-        Gravação
+        {t("settings.recording")}
       </Text>
 
       <View style={[styles.item, { backgroundColor: theme.card }]}>
         <HourglassHigh size={20} color={theme.foreground} weight="regular" />
         <Text style={[styles.itemText, { color: theme.foreground }]}>
-          Contagem regressiva 3..2..1
+          {t("settings.countdown")}
         </Text>
         <Switch
           value={countdownEnabled}
@@ -197,7 +204,7 @@ export default function Settings() {
           { color: theme.mutedForeground, marginTop: 24 },
         ]}
       >
-        Backup & Dados
+        {t("settings.backup_data")}
       </Text>
 
       {/* Export Metadata (legacy) */}
@@ -207,7 +214,7 @@ export default function Settings() {
       >
         <DownloadSimple size={20} color={theme.foreground} weight="regular" />
         <Text style={[styles.itemText, { color: theme.foreground }]}>
-          Exportar metadados (JSON)
+          {t("settings.export_json")}
         </Text>
         <CaretRight size={16} color={theme.mutedForeground} weight="bold" />
       </Pressable>
@@ -218,9 +225,9 @@ export default function Settings() {
         disabled={backupLoading}
         style={[styles.item, { backgroundColor: theme.card }]}
       >
-        <Package size={20} color={theme.primary} weight="regular" />
+        <Crown size={20} color={theme.proPurple} weight="fill" />
         <Text style={[styles.itemText, { color: theme.foreground }]}>
-          {backupLoading ? "Exportando..." : "Exportar Backup Completo"}
+          {backupLoading ? t("settings.exporting") : t("settings.export_full")}
         </Text>
         {backupLoading ? (
           <ActivityIndicator size="small" color={theme.primary} />
@@ -235,9 +242,9 @@ export default function Settings() {
         disabled={restoreLoading}
         style={[styles.item, { backgroundColor: theme.card }]}
       >
-        <ArrowCounterClockwise size={20} color={theme.primary} weight="regular" />
+        <Crown size={20} color={theme.proPurple} weight="fill" />
         <Text style={[styles.itemText, { color: theme.foreground }]}>
-          {restoreLoading ? "Restaurando..." : "Restaurar Backup"}
+          {restoreLoading ? t("settings.restoring") : t("settings.restore_backup")}
         </Text>
         {restoreLoading ? (
           <ActivityIndicator size="small" color={theme.primary} />
@@ -253,13 +260,26 @@ export default function Settings() {
       >
         <Trash size={20} color={theme.destructive} weight="fill" />
         <Text style={[styles.itemText, { color: theme.destructive, fontWeight: "bold" }]}>
-          {clearing ? "Limpando..." : "Limpar todos os dados"}
+          {clearing ? t("settings.clearing") : t("settings.clear_all")}
         </Text>
       </Pressable>
 
       <Text style={[styles.sectionTitle, { color: theme.mutedForeground }]}>
-        Informações
+        {t("settings.info")}
       </Text>
+
+      {/* Language */}
+      <Pressable
+        onPress={toggleLanguage}
+        style={[styles.item, { backgroundColor: theme.card }]}
+      >
+        <Text style={[styles.itemText, { color: theme.foreground }]}>
+          {t("settings.language")}
+        </Text>
+        <Text style={{ color: theme.primary, fontWeight: "bold" }}>
+          {language === "pt-BR" ? "Português" : "English"}
+        </Text>
+      </Pressable>
 
       {/* PRO Banner */}
       <Pressable
@@ -272,9 +292,9 @@ export default function Settings() {
       >
         <Crown size={20} color={theme.proPurple} weight="fill" />
         <Text style={[styles.itemText, { color: theme.foreground, fontWeight: "bold" }]}>
-          Riff Maker PRO
+          {t("settings.pro")}
         </Text>
-        <Text style={{ color: theme.proPurple, fontSize: 13, fontWeight: "bold" }}>Ver</Text>
+        <Text style={{ color: theme.proPurple, fontSize: 13, fontWeight: "bold" }}>{t("settings.view")}</Text>
         <CaretRight size={16} color={theme.proPurple} weight="bold" />
       </Pressable>
 
@@ -284,7 +304,7 @@ export default function Settings() {
       >
         <ShieldCheck size={20} color={theme.foreground} weight="regular" />
         <Text style={[styles.itemText, { color: theme.foreground }]}>
-          Política de Privacidade
+          {t("settings.privacy")}
         </Text>
         <CaretRight size={16} color={theme.mutedForeground} weight="bold" />
       </Pressable>
@@ -292,7 +312,7 @@ export default function Settings() {
       <View style={[styles.item, { backgroundColor: theme.card }]}>
         <Info size={20} color={theme.foreground} weight="regular" />
         <Text style={[styles.itemText, { color: theme.foreground }]}>
-          Versão
+          {t("settings.version")}
         </Text>
         <Text style={[styles.versionText, { color: theme.mutedForeground }]}>
           1.0.0
@@ -308,10 +328,10 @@ export default function Settings() {
                 <Trash size={32} color={theme.destructive} weight="fill" />
               </View>
               <Text style={{ fontSize: 20, fontWeight: "900", color: theme.foreground, textAlign: "center", marginBottom: 8 }}>
-                Deletar tudo?
+                {t("clear.title")}
               </Text>
               <Text style={{ fontSize: 15, color: theme.mutedForeground, textAlign: "center", lineHeight: 22 }}>
-                Esta ação apagará permanentemente todos os seus Projetos, Ideias, e Áudios gravados.{"\n\n"}Não pode ser desfeita.
+                {t("clear.desc")}
               </Text>
             </View>
             <View style={{ flexDirection: "row", gap: 12 }}>
@@ -319,14 +339,14 @@ export default function Settings() {
                 style={{ flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: theme.input, alignItems: "center" }}
                 onPress={() => setShowClearModal(false)}
               >
-                <Text style={{ color: theme.foreground, fontWeight: "bold" }}>Cancelar</Text>
+                <Text style={{ color: theme.foreground, fontWeight: "bold" }}>{t("clear.cancel")}</Text>
               </Pressable>
 
               <Pressable
                 style={{ flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: theme.destructive, alignItems: "center" }}
                 onPress={performClearData}
               >
-                <Text style={{ color: "#fff", fontWeight: "bold" }}>Apagar Tudo</Text>
+                <Text style={{ color: "#fff", fontWeight: "bold" }}>{t("clear.confirm")}</Text>
               </Pressable>
             </View>
           </Pressable>

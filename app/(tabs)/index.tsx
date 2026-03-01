@@ -1,66 +1,65 @@
+import { CreativeInsightsBanner } from "@/components/CreativeInsightsBanner";
+import { ProQuotaBanner } from "@/components/ProQuotaBanner";
 import { RiffCard } from "@/components/RiffCard";
 import { useTheme } from "@/components/ThemeProvider";
 import { RiffCardSkeleton } from "@/src/components/SkeletonLoader";
 import { SORT_OPTIONS } from "@/src/constants/app";
 import { useHaptic } from "@/src/hooks/useHaptic";
-import { getProjects } from "@/src/storage/projects";
-import {
-    deleteRiff,
-    duplicateIdea,
-    getRiffs,
-    toggleFavorite,
-    updateRiff,
-} from "@/src/storage/riffs";
-import { Project } from "@/src/types/project";
+import { useHomeRiffs } from "@/src/hooks/useHomeRiffs";
+import { useTranslation } from "@/src/i18n";
 import { RecordingType, Riff } from "@/src/types/riff";
 import {
-    calculateStreak,
-    getFavoritesThisWeek,
-    getInboxRiffs,
-    getRiffsWithMarkers,
-    getUnnamedRiffs,
-    getWeeklyProgress,
-    searchRiffs,
-    SortOption,
-    sortRiffs
+  calculateStreak,
+  getFavoritesThisWeek,
+  getInboxRiffs,
+  getRiffsWithMarkers,
+  getUnnamedRiffs,
+  getWeeklyProgress,
+  searchRiffs,
+  SortOption,
+  sortRiffs
 } from "@/src/utils/riffUtils";
+import { useIsFocused } from "@react-navigation/native";
 import { BlurView } from "expo-blur";
 import { useFocusEffect, useRouter } from "expo-router";
 import {
-    BookmarkSimple,
-    CaretDown,
-    CaretUp,
-    Check,
-    DotsThree,
-    FolderSimple,
-    Guitar,
-    MagnifyingGlass,
-    Microphone,
-    Play,
-    SlidersHorizontal,
-    Sparkle,
-    SpeakerHifi,
-    Star,
-    Tag,
-    Trash,
-    Waveform,
-    X
+  BookmarkSimple,
+  CaretDown,
+  CaretUp,
+  Check,
+  DotsThree,
+  FolderSimple,
+  Guitar,
+  MagnifyingGlass,
+  Microphone,
+  Play,
+  SlidersHorizontal,
+  Sparkle,
+  SpeakerHifi,
+  Star,
+  Tag,
+  Waveform
 } from "phosphor-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    Alert,
-    Animated,
-    Easing,
-    Modal,
-    Pressable,
-    ScrollView,
-    SectionList,
-    StyleSheet,
-    Text,
-    TextInput,
-    View
+  Alert,
+  Animated,
+  DeviceEventEmitter,
+  Easing,
+  LayoutAnimation,
+  Modal,
+  Pressable,
+  ScrollView,
+  SectionList,
+  StyleSheet,
+  Text,
+  TextInput,
+  View
 } from "react-native";
+import Reanimated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+
 
 const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 
@@ -79,9 +78,20 @@ const RECORDING_TYPES: { id: RecordingType; label: string; icon: any }[] = [
 
 const AnimatedSectionList = Animated.createAnimatedComponent(SectionList<Riff>);
 
-function groupRiffsByDate(riffs: Riff[], sortBy: SortOption) {
+export function getGroupTitle(key: string, t: any) {
+  switch (key) {
+    case "HOJE": return t("date.today");
+    case "ONTEM": return t("date.yesterday");
+    case "ESTA SEMANA": return t("date.this_week");
+    case "MAIS ANTIGAS": return t("date.older");
+    case "IDEIAS": return t("date.ideas");
+    default: return key;
+  }
+}
+
+function groupRiffsByDate(riffs: Riff[], sortBy: SortOption, t: any) {
   if (sortBy !== "newest" && sortBy !== "oldest") {
-    return [{ title: "IDEIAS", data: riffs }];
+    return [{ title: t("date.ideas"), data: riffs }];
   }
 
   const groups: Record<string, Riff[]> = {
@@ -105,15 +115,15 @@ function groupRiffsByDate(riffs: Riff[], sortBy: SortOption) {
   
   const sections = [];
   if (sortBy === "oldest") {
-    if (groups["MAIS ANTIGAS"].length) sections.push({ title: "MAIS ANTIGAS", data: groups["MAIS ANTIGAS"] });
-    if (groups["ESTA SEMANA"].length) sections.push({ title: "ESTA SEMANA", data: groups["ESTA SEMANA"] });
-    if (groups["ONTEM"].length) sections.push({ title: "ONTEM", data: groups["ONTEM"] });
-    if (groups["HOJE"].length) sections.push({ title: "HOJE", data: groups["HOJE"] });
+    if (groups["MAIS ANTIGAS"].length) sections.push({ title: t("date.older"), data: groups["MAIS ANTIGAS"] });
+    if (groups["ESTA SEMANA"].length) sections.push({ title: t("date.this_week"), data: groups["ESTA SEMANA"] });
+    if (groups["ONTEM"].length) sections.push({ title: t("date.yesterday"), data: groups["ONTEM"] });
+    if (groups["HOJE"].length) sections.push({ title: t("date.today"), data: groups["HOJE"] });
   } else {
-    if (groups["HOJE"].length) sections.push({ title: "HOJE", data: groups["HOJE"] });
-    if (groups["ONTEM"].length) sections.push({ title: "ONTEM", data: groups["ONTEM"] });
-    if (groups["ESTA SEMANA"].length) sections.push({ title: "ESTA SEMANA", data: groups["ESTA SEMANA"] });
-    if (groups["MAIS ANTIGAS"].length) sections.push({ title: "MAIS ANTIGAS", data: groups["MAIS ANTIGAS"] });
+    if (groups["HOJE"].length) sections.push({ title: t("date.today"), data: groups["HOJE"] });
+    if (groups["ONTEM"].length) sections.push({ title: t("date.yesterday"), data: groups["ONTEM"] });
+    if (groups["ESTA SEMANA"].length) sections.push({ title: t("date.this_week"), data: groups["ESTA SEMANA"] });
+    if (groups["MAIS ANTIGAS"].length) sections.push({ title: t("date.older"), data: groups["MAIS ANTIGAS"] });
   }
   
   return sections;
@@ -122,16 +132,34 @@ function groupRiffsByDate(riffs: Riff[], sortBy: SortOption) {
 export default function Home() {
   const theme = useTheme();
   const router = useRouter();
+  const { t } = useTranslation();
   const { triggerHaptic } = useHaptic();
   const insets = useSafeAreaInsets();
 
-  const [riffs, setRiffs] = useState<Riff[]>([]);
+  const {
+    riffs,
+    projects,
+    loading,
+    loadRiffs,
+    handleDelete,
+    handleDuplicate,
+    handleToggleFavorite,
+    handleBulkDelete,
+    handleBulkMove,
+    selectionMode,
+    setSelectionMode,
+    selectedIds,
+    setSelectedIds,
+    showMoveModal,
+    setShowMoveModal,
+  } = useHomeRiffs();
+
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
+  const isFocused = useIsFocused();
+  const [animKey, setAnimKey] = useState(0);
   const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [showSortMenu, setShowSortMenu] = useState(false);
 
-  const [projects, setProjects] = useState<Project[]>([]);
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
   const [activeTags, setActiveTags] = useState<string[]>([]);
   const [activeTypes, setActiveTypes] = useState<RecordingType[]>([]);
@@ -140,11 +168,6 @@ export default function Home() {
   const [expandedFilter, setExpandedFilter] = useState<"projects" | "tags" | "types" | null>(null);
   const [riffToRename, setRiffToRename] = useState<Riff | null>(null);
   const [activeSmartList, setActiveSmartList] = useState<"inbox" | "markers" | "favorites-week" | "unnamed" | null>(null);
-
-  // Multi-select
-  const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [showMoveModal, setShowMoveModal] = useState(false);
 
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const searchScaleAnim = useRef(new Animated.Value(1)).current;
@@ -164,80 +187,25 @@ export default function Home() {
     ).start();
   }, [pulseAnim]);
 
-  async function loadRiffs() {
-    setLoading(true);
-    try {
-      const data = await getRiffs();
-      setRiffs(data);
-      
-      const projs = await getProjects();
-      setProjects(projs);
 
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 250,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
-    } catch (error) {
-      Alert.alert("Erro", "Não foi possível carregar as ideias.");
-    } finally {
-      setLoading(false);
-    }
-  }
 
-  async function handleDelete(id: string) {
-    Alert.alert("Apagar ideia?", "Essa ação não pode ser desfeita.", [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Apagar",
-        style: "destructive",
-        onPress: async () => {
-          triggerHaptic("medium");
-          try {
-            await deleteRiff(id);
-            await loadRiffs();
-            triggerHaptic("success");
-          } catch (error) {
-            Alert.alert("Erro", "Não foi possível apagar a ideia.");
-            triggerHaptic("error");
-          }
-        },
-      },
-    ]);
-  }
-
-  async function handleDuplicate(id: string) {
-    try {
-      triggerHaptic("light");
-      const duplicate = await duplicateIdea(id);
-      if (duplicate) {
-        await loadRiffs();
-        triggerHaptic("success");
-      }
-    } catch (error) {
-      Alert.alert("Erro", "Não foi possível duplicar a ideia.");
-      triggerHaptic("error");
-    }
-  }
-
-  async function handleToggleFavorite(id: string) {
-    try {
-      triggerHaptic("light");
-      await toggleFavorite(id);
-      setRiffs((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, favorite: !r.favorite } : r)),
-      );
-    } catch (error) {
-      Alert.alert("Erro", "Não foi possível favoritar a ideia.");
-    }
-  }
+  useEffect(() => {
+    DeviceEventEmitter.emit("selectionModeChange", selectionMode);
+  }, [selectionMode]);
 
   useFocusEffect(
     useCallback(() => {
-      loadRiffs();
+      loadRiffs(() => {
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 250,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }).start();
+      });
       overlayOpacityAnim.setValue(0); // reset immersion overlay when returning
-    }, []),
+      setAnimKey((k) => k + 1); // re-trigger stagger animation
+    }, [fadeAnim, loadRiffs, overlayOpacityAnim]),
   );
 
   const handleImmersiveRecord = () => {
@@ -291,7 +259,7 @@ export default function Home() {
     () => sortRiffs(searchRiffs(filteredBySmartList, search), sortBy),
     [filteredBySmartList, search, sortBy]
   );
-  const sections = useMemo(() => groupRiffsByDate(filteredRiffs, sortBy), [filteredRiffs, sortBy]);
+  const sections = useMemo(() => groupRiffsByDate(filteredRiffs, sortBy, t), [filteredRiffs, sortBy, t]);
 
   const totalIdeias = riffs.length;
   const totalFavoritas = riffs.filter(r => r.favorite).length;
@@ -309,11 +277,7 @@ export default function Home() {
     return null;
   }, []);
 
-  const headerHeight = scrollY.interpolate({
-    inputRange: [0, 60],
-    outputRange: [100, 64],
-    extrapolate: 'clamp',
-  });
+  const headerHeight = 100; // Fixed to avoid layout thrashing on scroll
 
   const headerTitleScale = scrollY.interpolate({
     inputRange: [0, 60],
@@ -333,21 +297,50 @@ export default function Home() {
     extrapolate: 'clamp',
   });
 
-  const handleSearchFocus = () => {
-    setIsSearchFocused(true);
-    Animated.parallel([
-      Animated.timing(searchScaleAnim, { toValue: 1.01, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.timing(searchGlowAnim, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: false })
-    ]).start();
-  };
+ const stopSearchAnims = () => {
+  searchScaleAnim.stopAnimation();
+  searchGlowAnim.stopAnimation();
+};
 
-  const handleSearchBlur = () => {
-    setIsSearchFocused(false);
-    Animated.parallel([
-      Animated.timing(searchScaleAnim, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.timing(searchGlowAnim, { toValue: 0, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: false })
-    ]).start();
-  };
+const handleSearchFocus = () => {
+  setIsSearchFocused(true);
+  stopSearchAnims();
+
+  Animated.parallel([
+    Animated.timing(searchScaleAnim, {
+      toValue: 1.01,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true, // OK (transform)
+    }),
+    Animated.timing(searchGlowAnim, {
+      toValue: 1,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false, // OBRIGATÓRIO (cor/sombra)
+    }),
+  ]).start();
+};
+
+const handleSearchBlur = () => {
+  setIsSearchFocused(false);
+  stopSearchAnims();
+
+  Animated.parallel([
+    Animated.timing(searchScaleAnim, {
+      toValue: 1,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }),
+    Animated.timing(searchGlowAnim, {
+      toValue: 0,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }),
+  ]).start();
+};
 
   const handleDeleteRiff = useCallback((id: string) => handleDelete(id), []);
 
@@ -383,48 +376,38 @@ export default function Home() {
     });
   }, [selectionMode, triggerHaptic]);
 
-  async function handleBulkDelete() {
-    Alert.alert(`Apagar ${selectedIds.size} ideia(s)?`, "Essa ação não pode ser desfeita.", [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Apagar",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await Promise.all([...selectedIds].map(id => deleteRiff(id)));
-            setSelectionMode(false);
-            setSelectedIds(new Set());
-            await loadRiffs();
-            triggerHaptic("success");
-          } catch {
-            Alert.alert("Erro", "Falha ao apagar seleção.");
-          }
-        },
-      },
-    ]);
-  }
 
-  async function handleBulkMove(projectId: string | null) {
-    try {
-      await Promise.all([...selectedIds].map(id => updateRiff(id, { projectId })));
-      setSelectionMode(false);
-      setSelectedIds(new Set());
-      setShowMoveModal(false);
-      await loadRiffs();
-      triggerHaptic("success");
-    } catch {
-      Alert.alert("Erro", "Falha ao mover seleção.");
-    }
-  }
 
   const getProjectColor = useCallback((projectId?: string | null) => {
     return projects.find(p => p.id === projectId)?.color;
   }, [projects]);
 
+  const getProjectName = useCallback((projectId?: string | null) => {
+    return projects.find(p => p.id === projectId)?.name;
+  }, [projects]);
+
+  const handleRenameRequest = useCallback((r: Riff) => {
+    setRiffToRename(r);
+  }, []);
+
+  const handleMoveRequest = useCallback((id: string) => {
+    setSelectedIds(new Set([id]));
+    setShowMoveModal(true);
+  }, []);
+
+  const handleShareRequest = useCallback(() => {
+    Alert.alert("Compartilhar", "Em breve...");
+  }, []);
+
   const renderItem = useCallback(({ item, index, section }: { item: Riff, index: number, section: any }) => {
-    const isFirstOfDay = index === 0 && section.title === "Hoje";
+    const isFirstOfDay = index === 0 && section.title === t("date.today");
+    const staggerDelay = Math.min(index, 20) * 65;
     return (
-      <View style={{ paddingHorizontal: 20 }}>
+      <Reanimated.View
+        key={`${animKey}-${item.id}`}
+        entering={FadeInDown.delay(staggerDelay).duration(300)}
+        style={{ paddingHorizontal: 20 }}
+      >
         {/* Timeline connector visual line on the left behind the cards */}
         <View style={{ position: "absolute", left: 30, top: 0, bottom: 0, width: 2, backgroundColor: theme.border, zIndex: -1, opacity: 0.5 }} />
         <View style={isFirstOfDay ? { transform: [{ scale: 1.02 }], zIndex: 10 } : undefined}>
@@ -435,26 +418,24 @@ export default function Home() {
             onToggleFavorite={handleToggleFavorite}
             onPress={handlePressRiff}
             onLongPress={handleLongPressCard}
-            onRenameRequest={selectionMode ? undefined : (r) => setRiffToRename(r)}
-            onMoveRequest={selectionMode ? undefined : (id) => {
-              setSelectedIds(new Set([id]));
-              setShowMoveModal(true);
-            }}
-            onShareRequest={selectionMode ? undefined : () => Alert.alert("Compartilhar", "Em breve...")}
+            onRenameRequest={selectionMode ? undefined : handleRenameRequest}
+            onMoveRequest={selectionMode ? undefined : handleMoveRequest}
+            onShareRequest={selectionMode ? undefined : handleShareRequest}
             projectColor={getProjectColor(item.projectId)}
+            projectName={getProjectName(item.projectId)}
             selectionMode={selectionMode}
             isSelected={selectedIds.has(item.id)}
           />
         </View>
-      </View>
+      </Reanimated.View>
     );
-  }, [handleToggleFavorite, getProjectColor, handleDeleteRiff, handlePressRiff, handleLongPressCard, selectionMode, selectedIds, theme]);
+  }, [animKey, handleToggleFavorite, handleDuplicate, getProjectColor, handleDeleteRiff, handlePressRiff, handleLongPressCard, handleRenameRequest, handleMoveRequest, handleShareRequest, selectionMode, selectedIds, theme]);
 
   if (loading) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.background, paddingTop: insets.top + 12 }}>
         <View style={{ paddingTop: 24, paddingBottom: 16, paddingHorizontal: 20 }}>
-           <Text style={{ fontSize: 28, fontWeight: "900", color: theme.foreground }}>Minhas Idéias</Text>
+           <Text style={{ fontSize: 28, fontWeight: "900", color: theme.foreground }}>{t("home.title")}</Text>
         </View>
         <View style={{ paddingHorizontal: 20 }}>
           <RiffCardSkeleton />
@@ -478,10 +459,10 @@ export default function Home() {
         />
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}>
           <View>
-            <Animated.Text style={{ 
-              fontSize: 32, 
-              fontWeight: "900", 
-              color: theme.foreground, 
+            <Animated.Text style={{
+              fontSize: 32,
+              fontWeight: "900",
+              color: theme.foreground,
               marginBottom: 2,
               transform: [
                 { scale: headerTitleScale },
@@ -489,12 +470,12 @@ export default function Home() {
                 { translateY: scrollY.interpolate({ inputRange: [0, 60], outputRange: [0, 8], extrapolate: 'clamp' }) }
               ]
             }}>
-              Minhas Idéias
+              {t("home.title")}
             </Animated.Text>
             {totalIdeias > 0 && (
               <Animated.View style={{ opacity: headerOpacity, overflow: 'hidden' }}>
                 <Text style={{ fontSize: 13, color: theme.mutedForeground }}>
-                  {totalIdeiasAgrupados} hoje • {totalFavoritas} favoritas
+                  {totalIdeiasAgrupados} {t("date.today_lower")} • {totalFavoritas} {t("home.favorites_count")}
                 </Text>
               </Animated.View>
             )}
@@ -509,12 +490,24 @@ export default function Home() {
           >
             <Star weight={mustHaveFavorite ? "fill" : "regular"} size={16} color={mustHaveFavorite ? theme.accent : theme.foreground} style={{ marginRight: 4 }} />
             <Text style={{ color: mustHaveFavorite ? theme.accent : theme.foreground, fontWeight: mustHaveFavorite ? "bold" : "600", fontSize: 13 }}>
-              Favoritas
+              {t("home.favorites")}
             </Text>
           </Pressable>
         </View>
       </Animated.View>
 
+      {/* Creative Insights Banner */}
+      {!selectionMode && riffs.length > 0 && (
+        <CreativeInsightsBanner riffs={riffs} />
+      )}
+
+      {/* PRO Quota Nudge */}
+      {!selectionMode && (
+        <ProQuotaBanner
+          riffCount={riffs.length}
+          onUpgradePress={() => router.push("/pro" as any)}
+        />
+      )}
       <View style={[styles.searchRow, { paddingHorizontal: 20 }]}>
         <Animated.View 
           style={{ 
@@ -535,7 +528,7 @@ export default function Home() {
           }}
         >
           <TextInput
-            placeholder="Buscar idéia..."
+            placeholder={t("home.search_placeholder")}
             placeholderTextColor={theme.mutedForeground + "99"}
             value={search}
             onChangeText={setSearch}
@@ -549,7 +542,11 @@ export default function Home() {
         </Animated.View>
 
         <Pressable
-          onPress={() => setShowSortMenu(!showSortMenu)}
+          onPress={() => {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setShowSortMenu(!showSortMenu);
+            triggerHaptic("light");
+          }}
           style={[
             styles.sortButton,
             { backgroundColor: theme.input, borderColor: theme.border },
@@ -570,7 +567,7 @@ export default function Home() {
           >
             <FolderSimple size={14} color={expandedFilter === "projects" ? theme.primaryForeground : theme.foreground} weight={expandedFilter === "projects" ? "bold" : "regular"} style={{ marginRight: 6 }} />
             <Text style={{ color: expandedFilter === "projects" ? theme.primaryForeground : theme.foreground, fontWeight: expandedFilter === "projects" ? "600" : "normal" }}>
-              Projetos {activeFolder !== null ? "• 1" : ""}
+              {t("home.filter_projects")} {activeFolder !== null ? "• 1" : ""}
             </Text>
             {expandedFilter === "projects" ? <CaretUp size={12} color={theme.primaryForeground} weight="bold" style={{ marginLeft: 6 }} /> : <CaretDown size={12} color={theme.foreground} weight="bold" style={{ marginLeft: 6 }} />}
           </Pressable>
@@ -584,7 +581,7 @@ export default function Home() {
           >
             <Tag size={14} color={expandedFilter === "tags" ? theme.primaryForeground : theme.foreground} weight={expandedFilter === "tags" ? "bold" : "regular"} style={{ marginRight: 6 }} />
             <Text style={{ color: expandedFilter === "tags" ? theme.primaryForeground : theme.foreground, fontWeight: expandedFilter === "tags" ? "600" : "normal" }}>
-              Tags {activeTags.length > 0 || mustHaveMarkers ? `• ${activeTags.length + (mustHaveMarkers ? 1 : 0)}` : ""}
+              {t("home.filter_tags")} {activeTags.length > 0 || mustHaveMarkers ? `• ${activeTags.length + (mustHaveMarkers ? 1 : 0)}` : ""}
             </Text>
             {expandedFilter === "tags" ? <CaretUp size={12} color={theme.primaryForeground} weight="bold" style={{ marginLeft: 6 }} /> : <CaretDown size={12} color={theme.foreground} weight="bold" style={{ marginLeft: 6 }} />}
           </Pressable>
@@ -598,7 +595,7 @@ export default function Home() {
           >
             <Guitar size={14} color={expandedFilter === "types" ? theme.primaryForeground : theme.foreground} weight={expandedFilter === "types" ? "bold" : "regular"} style={{ marginRight: 6 }} />
             <Text style={{ color: expandedFilter === "types" ? theme.primaryForeground : theme.foreground, fontWeight: expandedFilter === "types" ? "600" : "normal" }}>
-              Tipos {activeTypes.length > 0 ? `• ${activeTypes.length}` : ""}
+              {t("home.filter_types")} {activeTypes.length > 0 ? `• ${activeTypes.length}` : ""}
             </Text>
             {expandedFilter === "types" ? <CaretUp size={12} color={theme.primaryForeground} weight="bold" style={{ marginLeft: 6 }} /> : <CaretDown size={12} color={theme.foreground} weight="bold" style={{ marginLeft: 6 }} />}
           </Pressable>
@@ -618,7 +615,7 @@ export default function Home() {
               ]}
             >
               <Text style={{ color: activeFolder === null ? theme.primaryForeground : theme.foreground, fontWeight: activeFolder === null ? "bold" : "normal" }}>
-                Todos
+                {t("home.filter_all")}
               </Text>
             </Pressable>
 
@@ -632,7 +629,7 @@ export default function Home() {
               ]}
             >
               <Text style={{ color: activeFolder === "none" ? theme.primaryForeground : theme.foreground, fontWeight: activeFolder === "none" ? "bold" : "normal" }}>
-                Avulsos
+                {t("home.filter_loose")}
               </Text>
             </Pressable>
 
@@ -676,7 +673,7 @@ export default function Home() {
             >
               <BookmarkSimple size={14} color={mustHaveMarkers ? "#fff" : theme.foreground} weight={mustHaveMarkers ? "bold" : "regular"} style={{ marginRight: 6 }} />
               <Text style={{ color: mustHaveMarkers ? "#fff" : theme.foreground, fontWeight: mustHaveMarkers ? "bold" : "normal" }}>
-                Marcações
+                {t("home.filter_marks")}
               </Text>
             </Pressable>
 
@@ -731,7 +728,7 @@ export default function Home() {
                  >
                    <type.icon weight="fill" size={14} color={isActive ? theme.primaryForeground : theme.mutedForeground} style={{ marginRight: 6 }} />
                    <Text style={{ color: isActive ? theme.primaryForeground : theme.foreground, fontWeight: isActive ? "bold" : "normal" }}>
-                     {type.label}
+                     {t(`types.${type.icon.name?.toLowerCase() || type.id.toLowerCase()}` as any) || type.label}
                    </Text>
                  </Pressable>
                );
@@ -743,7 +740,10 @@ export default function Home() {
       {showSortMenu && (
         <Pressable 
           style={[StyleSheet.absoluteFill, { zIndex: 10, elevation: 10 }]} 
-          onPress={() => setShowSortMenu(false)} 
+          onPress={() => {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setShowSortMenu(false);
+          }} 
         />
       )}
 
@@ -759,6 +759,7 @@ export default function Home() {
               <Pressable
                 key={option.value}
                 onPress={() => {
+                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                   setSortBy(option.value as SortOption);
                   setShowSortMenu(false);
                   triggerHaptic("light");
@@ -801,27 +802,29 @@ export default function Home() {
           styles.selectionBar,
           { backgroundColor: theme.card, borderTopColor: theme.border }
         ]}>
-          <Text style={{ color: theme.foreground, fontWeight: "700", fontSize: 13 }}>
-            {selectedIds.size} selecionado(s)
+          <Text style={{ color: theme.foreground, fontWeight: "700", fontSize: 13, flex: 1 }}>
+            {selectedIds.size} {selectedIds.size === 1 ? t("home.selected_singular") : t("home.selected_plural")}
           </Text>
-          <Pressable
-            onPress={() => setShowMoveModal(true)}
-            style={{ padding: 8, backgroundColor: theme.input, borderRadius: 8 }}
-          >
-            <FolderSimple size={18} color={theme.foreground} />
-          </Pressable>
-          <Pressable
-            onPress={handleBulkDelete}
-            style={{ padding: 8, backgroundColor: theme.destructive + "20", borderRadius: 8 }}
-          >
-            <Trash size={18} color={theme.destructive} />
-          </Pressable>
-          <Pressable
-            onPress={() => { setSelectionMode(false); setSelectedIds(new Set()); }}
-            style={{ padding: 8 }}
-          >
-            <X size={18} color={theme.mutedForeground} />
-          </Pressable>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Pressable
+              onPress={() => { setSelectionMode(false); setSelectedIds(new Set()); }}
+              style={{ padding: 8 }}
+            >
+              <Text style={{ color: theme.mutedForeground, fontWeight: "600", fontSize: 13 }}>{t("cancel")}</Text>
+            </Pressable>
+            <Pressable
+              onPress={handleBulkDelete}
+              style={{ paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, backgroundColor: "transparent", borderWidth: 1, borderColor: theme.destructive + "50" }}
+            >
+              <Text style={{ color: theme.destructive, fontWeight: "bold", fontSize: 13 }}>{t("delete")}</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setShowMoveModal(true)}
+              style={{ paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, backgroundColor: theme.primary }}
+            >
+              <Text style={{ color: theme.primaryForeground, fontWeight: "bold", fontSize: 13 }}>{t("home.move_to_project").split(' ')[0]}</Text>
+            </Pressable>
+          </View>
         </View>
       )}
 
@@ -829,12 +832,12 @@ export default function Home() {
       <Modal visible={showMoveModal} transparent animationType="slide">
         <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)" }} onPress={() => setShowMoveModal(false)}>
           <Pressable style={[{ backgroundColor: theme.card, borderRadius: 16, margin: 20, padding: 20, marginTop: 'auto' }]}>
-            <Text style={{ color: theme.foreground, fontSize: 16, fontWeight: "800", marginBottom: 16 }}>Mover para Projeto</Text>
+            <Text style={{ color: theme.foreground, fontSize: 16, fontWeight: "800", marginBottom: 16 }}>{t("home.move_to_project")}</Text>
             <Pressable
               onPress={() => handleBulkMove(null)}
               style={{ padding: 12, borderRadius: 8, backgroundColor: theme.input, marginBottom: 8 }}
             >
-              <Text style={{ color: theme.foreground }}>Sem projeto (Avulso)</Text>
+              <Text style={{ color: theme.foreground }}>{t("home.no_project")}</Text>
             </Pressable>
             {projects.map(p => (
               <Pressable
@@ -854,10 +857,10 @@ export default function Home() {
         <View style={styles.empty}>
           <Sparkle size={64} color={theme.mutedForeground} weight="duotone" style={{ marginBottom: 20 }} />
           <Text style={[styles.emptyTitle, { color: theme.foreground }]}>
-            Sua lousa em branco
+            {t("home.empty_title")}
           </Text>
           <Text style={{ color: theme.mutedForeground, textAlign: "center", marginBottom: 32, fontSize: 15, lineHeight: 22 }}>
-            A próxima ideia pode mudar tudo.
+            {t("home.empty_desc")}
           </Text>
           <Pressable 
             onPress={handleImmersiveRecord}
@@ -873,17 +876,17 @@ export default function Home() {
               shadowOffset: { width: 0, height: 4 }
             }]}
           >
-            <Text style={{ color: theme.primaryForeground, fontWeight: "900", fontSize: 16 }}>GRAVAR AGORA</Text>
+            <Text style={{ color: theme.primaryForeground, fontWeight: "900", fontSize: 16 }}>{t("home.record_now")}</Text>
           </Pressable>
         </View>
       ) : sections.length === 0 ? (
         <View style={styles.empty}>
           <MagnifyingGlass size={64} color={theme.mutedForeground} weight="duotone" style={{ marginBottom: 20 }} />
           <Text style={[styles.emptyTitle, { color: theme.foreground }]}>
-            Nenhuma idéia encontrada
+            {t("home.not_found")}
           </Text>
           <Text style={{ color: theme.mutedForeground, textAlign: "center", fontSize: 15 }}>
-            Tente mudar o filtro ou crie uma nova idéia.
+            {t("home.not_found_desc")}
           </Text>
         </View>
       ) : (
@@ -895,9 +898,13 @@ export default function Home() {
             keyExtractor={(item: Riff) => item.id}
             onScroll={Animated.event(
               [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-              { useNativeDriver: false }
+              { useNativeDriver: true }
             )}
             scrollEventThrottle={16}
+            initialNumToRender={6}
+            maxToRenderPerBatch={4}
+            windowSize={5}
+            removeClippedSubviews={true}
             renderItem={renderItem}
             ListHeaderComponent={renderListHeader}
             renderSectionHeader={({ section: { title } }) => (
