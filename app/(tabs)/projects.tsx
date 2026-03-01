@@ -1,17 +1,17 @@
+import { AnimatedHeaderTitle } from "@/components/AnimatedHeaderTitle";
 import { Screen } from "@/components/Screen";
 import { useTheme } from "@/components/ThemeProvider";
 import { useHaptic } from "@/src/hooks/useHaptic";
+import { useTranslation } from "@/src/i18n";
 import { PROJECT_COLORS, createProject, getProjects } from "@/src/storage/projects";
 import { getRiffs } from "@/src/storage/riffs";
 import { Project } from "@/src/types/project";
 import { Riff } from "@/src/types/riff";
 import { useFocusEffect, useRouter } from "expo-router";
 import { CaretRight, FolderOpen, FolderSimple, Plus } from "phosphor-react-native";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useState } from "react";
 import {
     Alert,
-    Animated,
-    Easing,
     FlatList,
     Pressable,
     ScrollView,
@@ -20,6 +20,7 @@ import {
     TextInput,
     View,
 } from "react-native";
+import Animated, { FadeInDown } from "react-native-reanimated";
 
 type ProjectWithStats = Project & { riffs: Riff[] };
 
@@ -40,9 +41,79 @@ const ProjectIcon = ({ color, size = 40 }: { color?: string; size?: number }) =>
   );
 };
 
+const AnimatedProjectCard = memo(({ item, index, animKey }: { item: ProjectWithStats, index: number, animKey: number }) => {
+  const theme = useTheme();
+  const router = useRouter();
+  const { t } = useTranslation();
+  
+  const timeAgo = new Date(item.updatedAt).toLocaleDateString();
+  const latestIdea = item.riffs.sort((a, b) => b.createdAt - a.createdAt)[0];
+
+  return (
+    <Animated.View
+      key={`${animKey}-${item.id}`}
+      entering={FadeInDown.delay(Math.min(index, 15) * 75).duration(320)}
+    >
+      <Pressable
+      style={({ pressed }) => [
+        styles.projectCard,
+        { 
+          backgroundColor: theme.card, 
+          borderColor: theme.border,
+          borderWidth: 1,
+        },
+        pressed && { opacity: 0.8 },
+      ]}
+      onPress={() => router.push(`/project/${item.id}` as any)}
+    >
+      <View style={styles.projectHeader}>
+        <View style={styles.titleRow}>
+          <ProjectIcon color={item.color} size={36} />
+          <Text style={[styles.projectName, { color: theme.foreground }]} numberOfLines={1}>
+            {item.name}
+          </Text>
+        </View>
+        <CaretRight size={16} color={theme.mutedForeground} weight="bold" />
+      </View>
+
+      <View style={styles.projectMeta}>
+        <Text style={[styles.metaText, { color: theme.mutedForeground }]}>
+          {item.riffs.length} {item.riffs.length === 1 ? t("projects.idea_singular") : t("projects.ideas_count")}
+        </Text>
+        <Text style={[styles.metaText, { color: theme.mutedForeground }]}>•</Text>
+        <Text style={[styles.metaText, { color: theme.mutedForeground }]}>
+          {t("projects.edited")} {timeAgo}
+        </Text>
+      </View>
+
+      {latestIdea ? (
+        <View style={{ flexDirection: "row", marginTop: 6, flexShrink: 1 }}>
+          <Text style={{ color: theme.mutedForeground, fontSize: 13, flexShrink: 0 }}>
+            {t("projects.last_idea")}{" "}
+          </Text>
+          <Text style={{ color: theme.foreground, fontWeight: "500", fontSize: 13, flex: 1 }} numberOfLines={1} ellipsizeMode="tail">
+            {latestIdea.name}
+          </Text>
+        </View>
+      ) : null}
+      
+      {/* Mini Waveform */}
+      {item.riffs.length > 0 && item.riffs.some(r => r.waveform && r.waveform.length > 0) && (
+         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 14, opacity: 0.25, height: 16 }}>
+           {item.riffs.find(r => r.waveform && r.waveform.length > 0)?.waveform?.slice(10, 30).map((lvl, idx) => (
+             <View key={idx} style={{ width: 3, height: Math.max(0.1, lvl < 0 ? (lvl + 160)/160 : lvl) * 16, backgroundColor: theme.mutedForeground, borderRadius: 2 }} />
+           ))}
+         </View>
+      )}
+    </Pressable>
+    </Animated.View>
+  );
+});
+
 export default function ProjectsList() {
   const theme = useTheme();
   const router = useRouter();
+  const { t } = useTranslation();
   const { triggerHaptic } = useHaptic();
 
   const [projects, setProjects] = useState<ProjectWithStats[]>([]);
@@ -71,9 +142,12 @@ export default function ProjectsList() {
     }
   };
 
+  const [animKey, setAnimKey] = useState(0);
+
   useFocusEffect(
     useCallback(() => {
       loadData();
+      setAnimKey((k) => k + 1);
     }, [])
   );
 
@@ -92,87 +166,18 @@ export default function ProjectsList() {
       triggerHaptic("success");
       loadData();
     } catch (e) {
-      Alert.alert("Erro", "Não foi possível criar o projeto.");
+      Alert.alert("Error", t("projects.create_error"));
     }
   };
 
-  const AnimatedProjectCard = ({ item, index }: { item: ProjectWithStats, index: number }) => {
-    const timeAgo = new Date(item.updatedAt).toLocaleDateString();
-    
-    // Animação cascata
-    const opacityAnim = useRef(new Animated.Value(0)).current;
-    const translateYAnim = useRef(new Animated.Value(15)).current;
-
-    useEffect(() => {
-      Animated.parallel([
-        Animated.timing(opacityAnim, { toValue: 1, duration: 250, delay: index * 60, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-        Animated.timing(translateYAnim, { toValue: 0, duration: 250, delay: index * 60, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      ]).start();
-    }, [index]);
-
-    const latestIdea = item.riffs.sort((a, b) => b.createdAt - a.createdAt)[0];
-
-    return (
-      <Animated.View style={{ opacity: opacityAnim, transform: [{ translateY: translateYAnim }] }}>
-        <Pressable
-        style={({ pressed }) => [
-          styles.projectCard,
-          { 
-            backgroundColor: theme.card, 
-            borderColor: theme.border,
-            borderWidth: 1,
-          },
-          pressed && { opacity: 0.8 },
-        ]}
-        onPress={() => router.push(`/project/${item.id}` as any)}
-      >
-        <View style={styles.projectHeader}>
-          <View style={styles.titleRow}>
-            <ProjectIcon color={item.color} size={36} />
-            <Text style={[styles.projectName, { color: theme.foreground }]} numberOfLines={1}>
-              {item.name}
-            </Text>
-          </View>
-          <CaretRight size={16} color={theme.mutedForeground} weight="bold" />
-        </View>
-
-        <View style={styles.projectMeta}>
-          <Text style={[styles.metaText, { color: theme.mutedForeground }]}>
-            {item.riffs.length} {item.riffs.length === 1 ? "ideia" : "ideias"}
-          </Text>
-          <Text style={[styles.metaText, { color: theme.mutedForeground }]}>•</Text>
-          <Text style={[styles.metaText, { color: theme.mutedForeground }]}>
-            Editado {timeAgo}
-          </Text>
-        </View>
-
-        {latestIdea ? (
-          <Text style={{ color: theme.mutedForeground, fontSize: 13, marginTop: 6 }} numberOfLines={1}>
-            Última: <Text style={{ color: theme.foreground, fontWeight: "500" }}>{latestIdea.name}</Text>
-          </Text>
-        ) : null}
-        
-        {/* Mini Waveform */}
-        {item.riffs.length > 0 && item.riffs.some(r => r.waveform && r.waveform.length > 0) && (
-           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 14, opacity: 0.25, height: 16 }}>
-             {item.riffs.find(r => r.waveform && r.waveform.length > 0)?.waveform?.slice(10, 30).map((lvl, idx) => (
-               <View key={idx} style={{ width: 3, height: Math.max(0.1, lvl < 0 ? (lvl + 160)/160 : lvl) * 16, backgroundColor: theme.mutedForeground, borderRadius: 2 }} />
-             ))}
-           </View>
-        )}
-      </Pressable>
-      </Animated.View>
-    );
-  };
-
-  const renderItem = ({ item, index }: { item: ProjectWithStats, index: number }) => (
-    <AnimatedProjectCard item={item} index={index} />
-  );
+  const renderItem = useCallback(({ item, index }: { item: ProjectWithStats, index: number }) => (
+    <AnimatedProjectCard item={item} index={index} animKey={animKey} />
+  ), [animKey]);
 
   return (
     <Screen background={theme.background}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.foreground }]}>Projetos</Text>
+        <AnimatedHeaderTitle title={t("projects.title")} fontSize={28} fontWeight="900" />
         
         {!isCreating && (
           <Pressable 
@@ -196,7 +201,7 @@ export default function ProjectsList() {
             </View>
             <TextInput
               style={[styles.inputName, { flex: 1, backgroundColor: theme.input, color: theme.foreground }]}
-              placeholder="Nome do Projeto..."
+              placeholder={t("projects.name_placeholder")}
               placeholderTextColor={theme.mutedForeground}
               value={newName}
               onChangeText={setNewName}
@@ -228,10 +233,10 @@ export default function ProjectsList() {
 
           <View style={styles.createActions}>
             <Pressable onPress={() => setIsCreating(false)} style={styles.actionBtn}>
-              <Text style={{ color: theme.mutedForeground, fontWeight: "600" }}>Cancelar</Text>
+              <Text style={{ color: theme.mutedForeground, fontWeight: "600" }}>{t("cancel")}</Text>
             </Pressable>
             <Pressable onPress={handleCreate} style={[styles.actionBtn, { backgroundColor: theme.primary }]}>
-              <Text style={{ color: theme.primaryForeground, fontWeight: "bold" }}>Criar</Text>
+              <Text style={{ color: theme.primaryForeground, fontWeight: "bold" }}>{t("projects.create")}</Text>
             </Pressable>
           </View>
         </View>
@@ -241,17 +246,33 @@ export default function ProjectsList() {
         data={projects}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
+        initialNumToRender={8}
+        maxToRenderPerBatch={6}
+        windowSize={5}
+        removeClippedSubviews={true}
+        style={{ backgroundColor: theme.background }}
+        contentContainerStyle={[styles.listContent, { backgroundColor: theme.background }]}
         ListEmptyComponent={
           !loading && !isCreating ? (
             <View style={styles.empty}>
-              <FolderOpen size={64} color={theme.mutedForeground} weight="duotone" />
+              <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: theme.muted, alignItems: "center", justifyContent: "center", marginBottom: 20 }}>
+                <FolderOpen size={44} color={theme.mutedForeground} weight="duotone" />
+              </View>
               <Text style={[styles.emptyTitle, { color: theme.foreground }]}>
-                Nenhum projeto ainda
+                {t("projects.empty_title")}
               </Text>
-              <Text style={[styles.emptyDesc, { color: theme.mutedForeground }]}>
-                Crie um projeto para organizar suas ideias.
+              <Text style={[styles.emptyDesc, { color: theme.mutedForeground, marginBottom: 28 }]}>
+                {t("projects.empty_desc")}
               </Text>
+              {/* Step hints */}
+              {["Grave uma ideia na tab Ideias", "Toque e segure para selecionar", "Use \"Mover\" para adicionar ao projeto"].map((step, i) => (
+                <View key={i} style={{ flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 8, paddingHorizontal: 8 }}>
+                  <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: theme.primary, alignItems: "center", justifyContent: "center" }}>
+                    <Text style={{ color: theme.primaryForeground, fontSize: 10, fontWeight: "900" }}>{i + 1}</Text>
+                  </View>
+                  <Text style={{ color: theme.mutedForeground, fontSize: 13, flex: 1, lineHeight: 20 }}>{step}</Text>
+                </View>
+              ))}
             </View>
           ) : null
         }

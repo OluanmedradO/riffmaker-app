@@ -1,7 +1,13 @@
-import React, { memo } from "react";
-import { Dimensions, StyleSheet, Text, View } from "react-native";
+import React, { memo, useMemo } from "react";
+import { Dimensions, StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, { runOnJS, SharedValue, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import Animated, {
+    runOnJS,
+    SharedValue,
+    useAnimatedStyle,
+    useSharedValue,
+} from "react-native-reanimated";
+import { G, Rect, Svg } from "react-native-svg";
 import { Marker } from "../src/types/riff";
 import { Playhead } from "./Playhead";
 import { useTheme } from "./ThemeProvider";
@@ -12,27 +18,145 @@ type Props = {
   playbackPositionMs: SharedValue<number>;
   markers?: Marker[];
   onSeek?: (ms: number) => void;
+  onScrubStateChange?: (isScrubbing: boolean) => void;
   waveformVersion?: number;
   isLooping?: boolean;
 };
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
-const BASE_BAR_SPACE = 4;
+const BAR_WIDTH = 3;
+const BAR_GAP = 1;
+const WAVEFORM_HEIGHT = 80;
 
+// ---------------------------------------------------------------------------
+// Normalize levels so the full height range is used and
+// quiet/loud differences are visible. Uses sqrt compression
+// so quiet parts aren't invisible.
+// ---------------------------------------------------------------------------
+function normalizeLevels(raw: number[]): number[] {
+  if (raw.length === 0) return [];
+
+  return raw.map((level) => {
+    const db = (level * 160) - 160;
+    const minDb = -45;
+    if (db <= minDb) return 0.04;
+    const ratio = (db - minDb) / (-minDb);
+    return Math.max(0.04, Math.min(1, ratio));
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Static SVG waveform — rendered once, never re-renders during playback
+// ---------------------------------------------------------------------------
+const WaveformSvg = memo(
+  ({
+    levels,
+    primaryColor,
+    width,
+    height,
+  }: {
+    levels: number[];
+    primaryColor: string;
+    width: number;
+    height: number;
+  }) => {
+    const normalizedLevels = useMemo(() => normalizeLevels(levels), [levels]);
+
+    const bars = useMemo(() => {
+      return normalizedLevels.map((lvl, i) => {
+        const barH = Math.max(2, lvl * height);
+        const x = i * (BAR_WIDTH + BAR_GAP);
+        const y = (height - barH) / 2;
+        const opacity = 0.45 + lvl * 0.55;
+        return { x, y, h: barH, opacity };
+      });
+    }, [normalizedLevels, height]);
+
+    return (
+      <Svg width={width} height={height}>
+        <G>
+          {bars.map((bar, i) => (
+            <Rect
+              key={i}
+              x={bar.x}
+              y={bar.y}
+              width={BAR_WIDTH}
+              height={bar.h}
+              rx={1.5}
+              fill={primaryColor}
+              opacity={bar.opacity}
+            />
+          ))}
+        </G>
+      </Svg>
+    );
+  },
+  (prev, next) =>
+    prev.levels === next.levels &&
+    prev.primaryColor === next.primaryColor &&
+    prev.width === next.width
+);
+
+// ---------------------------------------------------------------------------
+// Marker — own component so useAnimatedStyle is at top level (no hooks in map)
+// ---------------------------------------------------------------------------
+function MarkerLine({
+  marker,
+  durationMs,
+  rawWidth,
+  scale,
+  bgColor,
+  textColor,
+}: {
+  marker: Marker;
+  durationMs: number;
+  rawWidth: number;
+  scale: SharedValue<number>;
+  bgColor: string;
+  textColor: string;
+}) {
+  const ratio = durationMs > 0 ? marker.timestampMs / durationMs : 0;
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    left: ratio * rawWidth * scale.value,
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        styles.markerLine,
+        { backgroundColor: bgColor },
+        animatedStyle,
+      ]}
+    >
+      <View style={[styles.markerLabel, { backgroundColor: bgColor }]}>
+        <Animated.Text style={[styles.markerText, { color: textColor }]}>
+          {marker.label}
+        </Animated.Text>
+      </View>
+    </Animated.View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
 function InteractiveWaveformInner({
   levels,
   durationMs,
   playbackPositionMs,
   markers = [],
   onSeek,
+  onScrubStateChange,
   isLooping = false,
 }: Props) {
   const theme = useTheme();
 
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
+  const isScrubbing = useSharedValue(false);
 
-  const rawWidth = Math.max(1, levels.length * BASE_BAR_SPACE);
+  const rawWidth = Math.max(1, levels.length * (BAR_WIDTH + BAR_GAP));
 
   const pinch = Gesture.Pinch()
     .onUpdate((e) => {
@@ -43,42 +167,50 @@ function InteractiveWaveformInner({
     });
 
   const pan = Gesture.Pan()
+    .minDistance(2)
+    .onStart(() => {
+      isScrubbing.value = true;
+      if (onScrubStateChange) runOnJS(onScrubStateChange)(true);
+    })
     .onChange((e) => {
-      if (!onSeek) return;
       const pixelDelta = -e.changeX;
-      // Because we scaled the width natively using width: rawWidth * scale.value and children as flex: 1, 
-      // the total width is indeed scaled correctly.
       const timeDelta = (pixelDelta / (rawWidth * scale.value)) * durationMs;
-      const newTime = Math.max(0, Math.min(playbackPositionMs.value + timeDelta, durationMs));
-      runOnJS(onSeek)(newTime);
+      playbackPositionMs.value = Math.max(
+        0,
+        Math.min(playbackPositionMs.value + timeDelta, durationMs)
+      );
+    })
+    .onFinalize(() => {
+      isScrubbing.value = false;
+      if (onScrubStateChange) runOnJS(onScrubStateChange)(false);
+      if (onSeek) runOnJS(onSeek)(playbackPositionMs.value);
     });
 
-  const tap = Gesture.Tap()
-    .onEnd((e) => {
-      if (!onSeek) return;
-      // E.x is relative to the GestureDetector's container bounds.
-      const center = (SCREEN_WIDTH - 32) / 2;
-      const distanceFromCenter = e.x - center;
-      const currentPixelPosition = (playbackPositionMs.value / durationMs) * rawWidth * scale.value;
-      const newPixelPosition = currentPixelPosition + distanceFromCenter;
-      
-      const newRatio = newPixelPosition / (rawWidth * scale.value);
-      const newTime = Math.max(0, Math.min(newRatio * durationMs, durationMs));
-      runOnJS(onSeek)(newTime);
-    });
+  const tap = Gesture.Tap().onEnd((e) => {
+    if (!onSeek) return;
+    const containerWidth = SCREEN_WIDTH - 32;
+    const center = containerWidth / 2;
+    const distanceFromCenter = e.x - center;
+    const currentPixelPosition =
+      (playbackPositionMs.value / durationMs) * rawWidth * scale.value;
+    const newPixelPosition = currentPixelPosition + distanceFromCenter;
+    const newRatio = newPixelPosition / (rawWidth * scale.value);
+    const newTime = Math.max(0, Math.min(newRatio * durationMs, durationMs));
+    runOnJS(onSeek)(newTime);
+  });
 
   const composed = Gesture.Simultaneous(pinch, Gesture.Race(pan, tap));
 
-  const animatedStyle = useAnimatedStyle(() => {
+  const animatedTrackStyle = useAnimatedStyle(() => {
     if (levels.length === 0 || durationMs === 0) {
-      return { transform: [{ translateX: SCREEN_WIDTH / 2 }] };
+      return { transform: [{ translateX: 0 }], width: rawWidth };
     }
-
-    const progressRatio = playbackPositionMs.value / durationMs;
-    const clampedProgress = Math.max(0, Math.min(progressRatio, 1));
+    const progressRatio = Math.max(
+      0,
+      Math.min(playbackPositionMs.value / durationMs, 1)
+    );
     const currentScaledWidth = rawWidth * scale.value;
-    const pixelPosition = clampedProgress * currentScaledWidth;
-
+    const pixelPosition = progressRatio * currentScaledWidth;
     const containerWidth = SCREEN_WIDTH - 32;
     const translateX = containerWidth / 2 - pixelPosition;
 
@@ -88,73 +220,38 @@ function InteractiveWaveformInner({
     };
   });
 
-  const averageEnergy = levels.length > 0 ? levels.reduce((sum, level) => {
-      const normalized = Math.max(0, level < 0 ? (level + 160) / 160 : level);
-      return sum + normalized;
-    }, 0) / levels.length : 0;
-  
-  let dynamicText = "";
-  if (averageEnergy > 0.6) dynamicText = "Alta Energia";
-  else if (averageEnergy > 0.3) dynamicText = "Dinâmica Média";
-  else dynamicText = "Suave";
-
   return (
     <View style={[styles.wrapper, { backgroundColor: theme.input }]}>
-      <View style={{ position: "absolute", top: 8, left: 12, zIndex: 10, flexDirection: "row", alignItems: "center", gap: 8 }}>
-         <Text style={{ color: theme.mutedForeground, fontSize: 10, fontWeight: "800", textTransform: "uppercase" }}>{dynamicText}</Text>
-         {isLooping && <Text style={{ color: theme.accent, fontSize: 10, fontWeight: "800", textTransform: "uppercase" }}>Em Loop</Text>}
-      </View>
+      {isLooping && (
+        <View style={[styles.loopBadge, { backgroundColor: theme.primary + "20" }]}>
+          <Animated.Text style={[styles.loopText, { color: theme.primary }]}>
+            loop
+          </Animated.Text>
+        </View>
+      )}
+
       <Playhead />
+
       <GestureDetector gesture={composed}>
         <View style={styles.container}>
-          <Animated.View style={[animatedStyle, styles.track]}>
-            {levels.map((level, i) => {
-              const normalized = Math.max(0.02, level < 0 ? (level + 160) / 160 : level);
-              return (
-                <View
-                  key={i}
-                  style={{
-                    flex: 1,
-                    marginRight: 1,
-                    height: normalized * 60,
-                    backgroundColor: theme.primary,
-                    borderRadius: 2,
-                  }}
-                />
-              );
-            })}
-
-            {/* RENDER MARKERS */}
-            {markers.map((marker) => {
-              const ratio = marker.timestampMs / (durationMs || 1);
-              
-              const markerStyle = useAnimatedStyle(() => {
-                 return { left: ratio * rawWidth * scale.value };
-              });
-
-              return (
-                <Animated.View
-                  key={marker.id}
-                  style={[
-                    markerStyle, 
-                    {
-                      position: "absolute",
-                      top: 10,
-                      bottom: 10,
-                      width: 2,
-                      backgroundColor: theme.secondary,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      zIndex: 2,
-                    }
-                  ]}
-                >
-                  <View style={{ position: "absolute", top: -14, backgroundColor: theme.secondary, paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4 }}>
-                     <Text style={{ fontSize: 8, color: theme.secondaryForeground, fontWeight: "bold" }}>{marker.label}</Text>
-                  </View>
-                </Animated.View>
-              );
-            })}
+          <Animated.View style={[styles.track, animatedTrackStyle]}>
+            <WaveformSvg
+              levels={levels}
+              primaryColor={theme.primary}
+              width={rawWidth}
+              height={WAVEFORM_HEIGHT}
+            />
+            {markers.map((marker) => (
+              <MarkerLine
+                key={marker.id}
+                marker={marker}
+                durationMs={durationMs}
+                rawWidth={rawWidth}
+                scale={scale}
+                bgColor={theme.secondary ?? "#888"}
+                textColor={theme.secondaryForeground ?? "#fff"}
+              />
+            ))}
           </Animated.View>
         </View>
       </GestureDetector>
@@ -179,15 +276,48 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderRadius: 8,
     position: "relative",
-    marginTop: 16,
+  },
+  loopBadge: {
+    position: "absolute",
+    top: 6,
+    right: 8,
+    zIndex: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  loopText: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
   },
   container: {
     flex: 1,
     justifyContent: "center",
   },
   track: {
-    flexDirection: "row",
+    position: "relative",
     alignItems: "center",
-    height: "100%",
+    justifyContent: "center",
+  },
+  markerLine: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: 2,
+    alignItems: "center",
+    zIndex: 2,
+  },
+  markerLabel: {
+    position: "absolute",
+    top: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  markerText: {
+    fontSize: 8,
+    fontWeight: "bold",
   },
 });

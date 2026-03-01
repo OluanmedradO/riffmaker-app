@@ -2,7 +2,7 @@
   "expo": {
     "name": "Riff Maker",
     "slug": "riffmaker",
-    "version": "1.0.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "riffmaker",
@@ -41,7 +41,8 @@
     },
     "plugins": [
       "expo-router",
-      "expo-audio"
+      "expo-audio",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true

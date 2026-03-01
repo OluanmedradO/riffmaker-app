@@ -16,14 +16,17 @@ export function useProGate() {
   const { can } = useAccess();
 
   const requirePro = useCallback(
-    (feature?: FeatureKey) => {
+    (feature?: FeatureKey, message?: string) => {
       // If a specific feature is given, check it
       if (feature && can(feature)) return false;
 
       // If no feature given, check general PRO status
       if (!feature && can("advancedExport")) return false;
 
-      router.push("/pro");
+      router.push({
+        pathname: "/pro",
+        params: message ? { message } : undefined
+      });
       return true; // blocked
     },
     [router, can],

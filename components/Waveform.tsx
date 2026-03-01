@@ -1,5 +1,5 @@
-import React, { memo } from "react";
-import { Dimensions, Pressable, StyleSheet, View } from "react-native";
+import React, { memo, useMemo } from "react";
+import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
 import Animated, { SharedValue, useAnimatedStyle } from "react-native-reanimated";
 import { Marker } from "../src/types/riff";
 import { Playhead } from "./Playhead";
@@ -11,12 +11,20 @@ type Props = {
   playbackPositionMs: SharedValue<number>;
   markers?: Marker[];
   onSeek?: (ms: number) => void;
-  /** Increment this to force re-render when levels array reference is stable but values changed */
   waveformVersion?: number;
+  markersVersion?: number; // ✅ opcional (recomendado)
 };
 
-const SCREEN_WIDTH = Dimensions.get("window").width;
-const BASE_BAR_SPACE = 4;
+const BAR_W = 3;
+const GAP = 1;
+const MAX_H = 60;
+const H_PADDING = 16; // wrapper padding total (se você tiver 16+16)
+const MARKER_W = 2;
+
+function clamp01(n: number) {
+  "worklet";
+  return Math.max(0, Math.min(n, 1));
+}
 
 function WaveformInner({
   levels,
@@ -26,69 +34,91 @@ function WaveformInner({
   onSeek,
 }: Props) {
   const theme = useTheme();
+  const { width: screenWidth } = useWindowDimensions();
 
-  const rawWidth = Math.max(1, levels.length * BASE_BAR_SPACE);
+  // ✅ largura real: N*(BAR_W+GAP) - GAP (sem gap no final)
+  const rawWidth = useMemo(() => {
+    if (levels.length <= 0) return 1;
+    return levels.length * (BAR_W + GAP) - GAP;
+  }, [levels.length]);
 
-  const animatedStyle = useAnimatedStyle(() => {
-    if (levels.length === 0 || durationMs === 0) {
-      return { transform: [{ translateX: SCREEN_WIDTH / 2 }] };
+  const containerWidth = Math.max(1, screenWidth - H_PADDING * 2);
+
+  const heights = useMemo(() => {
+    if (levels.length === 0) return [];
+    return levels.map((level) => {
+      const db = (level * 160) - 160;
+      const minDb = -45;
+      let ratio = 0.04;
+      if (db > minDb) {
+        ratio = (db - minDb) / (-minDb);
+      }
+      const normalized = Math.max(0.04, Math.min(1, ratio));
+      return normalized * MAX_H;
+    });
+  }, [levels]);
+
+  const animatedTrackStyle = useAnimatedStyle(() => {
+    if (levels.length === 0 || durationMs <= 0) {
+      return { transform: [{ translateX: containerWidth / 2 }] };
     }
 
-    const progressRatio = playbackPositionMs.value / durationMs;
-    const clampedProgress = Math.max(0, Math.min(progressRatio, 1));
-    const pixelPosition = clampedProgress * rawWidth;
+    const progress = clamp01(playbackPositionMs.value / durationMs);
+    const pixelPosition = progress * rawWidth;
 
-    // Center the currently playing position under the playhead
-    const containerWidth = SCREEN_WIDTH - 32;
+    // centro do container - posição do áudio
     const translateX = containerWidth / 2 - pixelPosition;
 
-    return {
-      transform: [{ translateX }],
-    };
-  });
+    return { transform: [{ translateX }] };
+  }, [containerWidth, rawWidth, durationMs, levels.length]);
+
+  const animatedMarkersStyle = animatedTrackStyle; // mesma transformação
 
   return (
     <View style={[styles.wrapper, { backgroundColor: theme.input }]}>
       <Playhead />
-      <View style={styles.container}>
-        <Animated.View style={[animatedStyle, styles.track, { width: rawWidth }]}>
-          {levels.map((level, i) => {
-            const normalized = Math.max(0.02, level < 0 ? (level + 160) / 160 : level);
-            return (
-              <View
-                key={i}
-                style={{
-                  width: BASE_BAR_SPACE - 1,
-                  marginRight: 1,
-                  height: normalized * 60,
-                  backgroundColor: theme.primary,
-                  borderRadius: 2,
-                }}
-              />
-            );
-          })}
 
-          {/* RENDER MARKERS AS ABSOLUTE PLACEMENTS */}
+      <View style={styles.container}>
+        {/* BARRAS */}
+        <Animated.View style={[styles.track, animatedTrackStyle, { width: rawWidth }]}>
+          {heights.map((h, i) => (
+            <View
+              key={i}
+              style={[
+                styles.bar,
+                {
+                  height: h,
+                  width: BAR_W,
+                  marginRight: i === heights.length - 1 ? 0 : GAP,
+                  backgroundColor: theme.primary,
+                },
+              ]}
+            />
+          ))}
+        </Animated.View>
+
+        {/* MARKERS (camada separada, mas sincronizada) */}
+        <Animated.View
+          pointerEvents="box-none"
+          style={[styles.markersLayer, animatedMarkersStyle, { width: rawWidth }]}
+        >
           {markers.map((marker) => {
             const ratio = marker.timestampMs / (durationMs || 1);
-            const xPos = ratio * rawWidth;
+            const x = clamp01(ratio) * rawWidth;
 
             return (
               <Pressable
                 key={marker.id}
                 hitSlop={{ top: 10, bottom: 10, left: 15, right: 15 }}
                 onPress={() => onSeek?.(marker.timestampMs)}
-                style={{
-                  position: "absolute",
-                  left: xPos,
-                  top: 20,
-                  bottom: 20,
-                  width: 2,
-                  backgroundColor: theme.primary,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  zIndex: 2,
-                }}
+                style={[
+                  styles.marker,
+                  {
+                    left: Math.max(0, x - MARKER_W / 2),
+                    width: MARKER_W,
+                    backgroundColor: theme.primary,
+                  },
+                ]}
               />
             );
           })}
@@ -98,16 +128,13 @@ function WaveformInner({
   );
 }
 
-/**
- * Memoized Waveform — only re-renders when levels reference changes,
- * durationMs changes, or waveformVersion increments.
- */
 export const Waveform = memo(WaveformInner, (prev, next) => {
   return (
     prev.levels === next.levels &&
     prev.durationMs === next.durationMs &&
     prev.markers === next.markers &&
-    prev.waveformVersion === next.waveformVersion
+    prev.waveformVersion === next.waveformVersion &&
+    prev.playbackPositionMs === next.playbackPositionMs
   );
 });
 
@@ -128,5 +155,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     height: "100%",
+  },
+  bar: {
+    borderRadius: 2,
+  },
+  markersLayer: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+  },
+  marker: {
+    position: "absolute",
+    top: 20,
+    bottom: 20,
+    zIndex: 2,
   },
 });

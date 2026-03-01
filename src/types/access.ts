@@ -9,10 +9,13 @@ export type AccessState = {
 };
 
 export type FeatureKey =
-  | "projects"
-  | "loopMode"
   | "voiceToMidi"
   | "tabTranscription"
   | "advancedExport"
   | "tagTemplates"
-  | "compareRiffs";
+  | "compareRiffs"
+  | "autoCombine"
+  | "fullBackup"
+  | "projectExport"
+  | "advancedFilters"
+  | "stats";

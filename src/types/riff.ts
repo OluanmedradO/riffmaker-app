@@ -36,12 +36,17 @@ export type Riff = {
   
   energyLevel?: "low" | "medium" | "high";
   averageRms?: number;
+  dynamicRange?: number; // Phase C: Energy Intel
   
   notes?: string;
   projectId?: string | null;
   emoji?: string;
   pinned?: boolean;
   detectedKey?: string;
+  
+  // Phase C: Context Capture
+  hourOfDay?: number;
+  dayOfWeek?: number;
   markers?: Marker[];
   midiData?: MidiNote[];
 
@@ -64,4 +69,7 @@ export type Riff = {
   // Loop region (milliseconds)
   loopStart?: number;
   loopEnd?: number;
+
+  // Draft mode — idea is not yet ready / WIP
+  draft?: boolean;
 };

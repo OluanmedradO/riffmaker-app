@@ -14,13 +14,10 @@ export function useHaptic() {
     try {
       switch (type) {
         case "light":
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          break;
         case "medium":
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          break;
         case "heavy":
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+          // Haptics removed to reduce excessive vibration based on user feedback.
+          // Only essential warnings and errors will vibrate.
           break;
         case "success":
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

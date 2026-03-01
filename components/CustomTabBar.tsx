@@ -1,11 +1,13 @@
 import { useHaptic } from "@/src/hooks/useHaptic";
+import { useTranslation } from "@/src/i18n";
 import { getRiffs } from "@/src/storage/riffs";
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useFocusEffect, useRouter } from "expo-router";
-import { ArrowsLeftRight, FolderSimple, Gear, Microphone, Waveform } from "phosphor-react-native";
+import { ArrowsLeftRight, FolderSimple, Gear, Waveform } from "phosphor-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
     Animated,
+    DeviceEventEmitter,
     Keyboard,
     Platform,
     Pressable,
@@ -14,6 +16,7 @@ import {
     View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { QuickRecordButton } from "./recorder/QuickRecordButton";
 import { useTheme } from "./ThemeProvider";
 
 const ICONS: Record<string, any> = {
@@ -32,6 +35,7 @@ const LABELS: Record<string, string> = {
 
 export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const theme = useTheme();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { triggerHaptic } = useHaptic();
@@ -42,10 +46,19 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
 
   // Keyboard navigation fix
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+  const [isSelectionMode, setSelectionMode] = useState(false);
+
   useEffect(() => {
     const showSub = Keyboard.addListener(Platform.OS === 'ios' ? "keyboardWillShow" : "keyboardDidShow", () => setKeyboardVisible(true));
     const hideSub = Keyboard.addListener(Platform.OS === 'ios' ? "keyboardWillHide" : "keyboardDidHide", () => setKeyboardVisible(false));
-    return () => { showSub.remove(); hideSub.remove(); };
+    
+    const selSub = DeviceEventEmitter.addListener("selectionModeChange", (mode) => setSelectionMode(mode));
+
+    return () => { 
+      showSub.remove(); 
+      hideSub.remove(); 
+      selSub.remove();
+    };
   }, []);
 
   useFocusEffect(
@@ -100,7 +113,12 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const tabs = state.routes.map((route, index) => {
     const isFocused = state.index === index;
     const Icon = ICONS[route.name] || Waveform;
-    const label = LABELS[route.name] || route.name;
+    const label = 
+      route.name === "index" ? t("tab.ideas") :
+      route.name === "projects" ? t("projects.title") :
+      route.name === "compare" ? t("compare.title") :
+      route.name === "settings" ? t("settings.title") :
+      route.name;
 
     return (
       <Pressable
@@ -134,22 +152,28 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   // Insert Record Button at index 2 (center)
   tabs.splice(2, 0, (
     <View key="record-center" style={styles.centerButtonWrapper}>
-      <Animated.View style={[
-        styles.glowLayer, 
-        { 
-          backgroundColor: theme.accent, 
-          opacity: glowAnim,
-          transform: [{ scale: pulseAnim }],
-        }
-      ]} />
-      <Pressable
-        onPress={handleRecordPress}
-        style={[styles.recordButton, { backgroundColor: theme.accent }]}
-      >
-        <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-           <Microphone size={32} color="#fff" weight="fill" />
-        </Animated.View>
-      </Pressable>
+      {!isSelectionMode && (
+        <>
+          <Animated.View style={[
+            styles.glowLayer, 
+            { 
+              backgroundColor: theme.accent, 
+              opacity: glowAnim,
+              transform: [{ scale: pulseAnim }],
+            }
+          ]} />
+          <QuickRecordButton
+            onTap={handleRecordPress}
+            onQuickSave={() => {
+              // Re-check ideas to stop the glowing if it was their first idea today
+              setHasIdeasToday(true);
+            }}
+            style={{ zIndex: 2 }}
+            buttonStyle={[styles.recordButton, { backgroundColor: theme.accent }]}
+            iconSize={32}
+          />
+        </>
+      )}
     </View>
   ));
 

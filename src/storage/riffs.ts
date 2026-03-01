@@ -9,7 +9,16 @@ const RIFFS_DIR = `${FileSystem.documentDirectory || ""}riffs/`;
 export function downsampleWaveform(data: number[], maxPoints: number = 800) {
   if (!data || data.length <= maxPoints) return data;
   const factor = Math.ceil(data.length / maxPoints);
-  return data.filter((_, index) => index % factor === 0);
+  
+  const result: number[] = [];
+  for (let i = 0; i < data.length; i += factor) {
+    let chunkMax = -200; // very low db value
+    for (let j = 0; j < factor && i + j < data.length; j++) {
+      chunkMax = Math.max(chunkMax, data[i + j]);
+    }
+    result.push(chunkMax);
+  }
+  return result;
 }
 
 async function ensureDirExists() {
