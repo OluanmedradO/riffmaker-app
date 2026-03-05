@@ -1,8 +1,9 @@
+﻿import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import { Platform } from "react-native";
-import { getProjects, saveProjects } from "../storage/projects";
-import { getRiffs, saveRiffs } from "../storage/riffs";
+import { getProjects, saveProjects } from "@/src/data/storage/projects";
+import { getRiffs, saveRiffs } from "@/src/data/storage/riffs";
 
 const RIFFS_DIR = `${FileSystem.documentDirectory ?? ""}riffs/`;
 const BACKUP_DIR = `${FileSystem.documentDirectory ?? ""}riffmaker_backup/`;
@@ -103,6 +104,9 @@ async function _exportAndroid(
       console.warn(`[Backup] Skipped audio file ${uri}:`, e);
     }
   }
+
+  // Save last backup timestamp
+  await AsyncStorage.setItem("@last_full_backup", Date.now().toString());
 
   return {
     success: true,
@@ -211,3 +215,5 @@ export async function restoreFullBackup(jsonUri: string): Promise<{
     return { success: false, message: error?.message ?? "Erro ao restaurar backup." };
   }
 }
+
+

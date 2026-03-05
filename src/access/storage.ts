@@ -1,5 +1,5 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { AccessState } from "../types/access";
+﻿import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { AccessState } from "@/src/domain/types/access";
 
 const KEY = "riffmaker_access_v1";
 
@@ -37,3 +37,4 @@ export async function saveAccess(next: AccessState) {
 export async function resetAccess() {
   await AsyncStorage.removeItem(KEY);
 }
+

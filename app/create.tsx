@@ -1,30 +1,31 @@
-import { showToast } from "@/components/AppToast";
-import { IdeaForm } from "@/components/IdeaForm";
-import { RecordingResult, RiffRecorder, RiffRecorderRef } from "@/components/recorder/RiffRecorder";
-import { Screen } from "@/components/Screen";
-import { useTheme } from "@/components/ThemeProvider";
+﻿import { showToast } from "@/src/shared/ui/AppToast";
+import { IdeaForm } from "@/src/features/riff/components/IdeaForm";
+import { RecordingResult, RiffRecorder, RiffRecorderRef } from "@/src/features/recorder/components/RiffRecorder";
+import { Screen } from "@/src/shared/ui/Screen";
+import { useTheme } from "@/src/shared/theme/ThemeProvider";
+import { SaveState, SaveStatusIndicator } from "@/src/shared/ui/SaveStatusIndicator";
 import { APP_CONFIG } from "@/src/constants/app";
-import { useHaptic } from "@/src/hooks/useHaptic";
+import { useAlert } from "@/src/contexts/AlertContext";
+import { useHaptic } from "@/src/shared/hooks/useHaptic";
 import { useTranslation } from "@/src/i18n";
-import { getProjects } from "@/src/storage/projects";
-import { addRiff } from "@/src/storage/riffs";
-import { Project } from "@/src/types/project";
-import { Riff } from "@/src/types/riff";
+import { getProjects } from "@/src/data/storage/projects";
+import { addRiff } from "@/src/data/storage/riffs";
+import { Project } from "@/src/domain/types/project";
+import { Riff } from "@/src/domain/types/riff";
 import { generateId } from "@/src/utils/formatters";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { Stack, useFocusEffect, useRouter } from "expo-router";
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    AppState,
-    AppStateStatus,
-    BackHandler,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  AppState,
+  AppStateStatus,
+  BackHandler,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -46,6 +47,8 @@ type AudioSnapshot = {
   averageRms?: number;
   energyLevel?: "low" | "medium" | "high";
   dynamicRange?: number;
+  energyData?: any;
+  bpmData?: any;
 };
 
 export default function CreateRiff() {
@@ -55,8 +58,10 @@ export default function CreateRiff() {
   const { t } = useTranslation();
   const { triggerHaptic } = useHaptic();
   const insets = useSafeAreaInsets();
+  const { projectId } = useLocalSearchParams<{ projectId: string }>();
+  const { showAlert } = useAlert();
 
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState<SaveState>("idle");
   const [projects, setProjects] = useState<Project[]>([]);
   const [waveform, setWaveform] = useState<number[]>([]);
   const [duration, setDuration] = useState(0);
@@ -71,6 +76,7 @@ export default function CreateRiff() {
     duration: 0,
     audioUri: "",
     waveform: [],
+    projectId: projectId || undefined,
   }).current;
 
   const [formData, setFormData] = useState<Riff>(initialRiff);
@@ -87,7 +93,10 @@ export default function CreateRiff() {
 
   useEffect(() => {
     latestFormData.current = formData;
-  }, [formData]);
+    if (audioUri || formData.name !== initialRiff.name || formData.notes) {
+      setSaving((prev: SaveState) => prev === "idle" ? "draft" : prev);
+    }
+  }, [formData, audioUri, initialRiff]);
 
   // ─── Auto-save when app goes to background ──────────────────────────────────
   useEffect(() => {
@@ -110,7 +119,7 @@ export default function CreateRiff() {
         onConfirm();
         return;
       }
-      Alert.alert(
+      showAlert(
         t("idea.discard_title"),
         t("idea.discard_unsaved"),
         [
@@ -119,19 +128,25 @@ export default function CreateRiff() {
         ]
       );
     },
-    [audioUri, t]
+    [audioUri, t, showAlert]
   );
 
   // Hardware back (Android)
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
-        confirmDiscard(() => router.back());
+        confirmDiscard(() => {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace("/");
+          }
+        });
         return true; // always intercept — confirmDiscard decides whether to navigate
       };
       const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
       return () => subscription.remove();
-    }, [confirmDiscard])
+    }, [confirmDiscard, router])
   );
 
   const nameError = formData.name.length > APP_CONFIG.MAX_RIFF_TITLE_LENGTH;
@@ -156,6 +171,8 @@ export default function CreateRiff() {
         averageRms,
         energyLevel,
         dynamicRange,
+        energyData: latestAudio.current.energyData,
+        bpmData: latestAudio.current.bpmData,
         notes: data.notes?.trim() || undefined,
         hourOfDay: now.getHours(),
         dayOfWeek: now.getDay(),
@@ -189,24 +206,26 @@ export default function CreateRiff() {
       return;
     }
 
-    setSaving(true);
+    setSaving("saving");
     try {
       const ok = await saveRiff();
       if (ok) {
         hasSaved.current = true;
+        setSaving("saved");
         triggerHaptic("success");
         router.back();
       } else {
+        setSaving("error");
         showToast({ type: "error", title: t("idea.error"), message: t("idea.save_failed") });
         triggerHaptic("error");
       }
     } finally {
-      setSaving(false);
+      if (!hasSaved.current) setSaving("draft");
     }
   }
 
   // ─── Render ──────────────────────────────────────────────────────────────────
-  const saveDisabled = !audioUri || saving || nameError || notesError;
+  const saveDisabled = !audioUri || saving === "saving" || nameError || notesError;
 
   return (
     <>
@@ -220,10 +239,19 @@ export default function CreateRiff() {
           headerLeft: () => (
             <Pressable
               style={{ padding: 8, marginLeft: -8 }}
-              onPress={() => confirmDiscard(() => router.back())}
+              onPress={() => confirmDiscard(() => {
+                if (router.canGoBack()) {
+                  router.back();
+                } else {
+                  router.replace("/");
+                }
+              })}
             >
               <FontAwesome name="chevron-left" size={20} color={theme.primaryForeground} />
             </Pressable>
+          ),
+          headerRight: () => (
+            <SaveStatusIndicator status={saving} />
           ),
         }}
       />
@@ -251,17 +279,34 @@ export default function CreateRiff() {
                   averageRms: data.averageRms,
                   energyLevel: data.energyLevel,
                   dynamicRange: data.dynamicRange,
+                  energyData: data.energyData,
+                  bpmData: data.bpmData,
                 };
+
+                // Immediately push AI extraction to the form so the UI shows it below!
+                setFormData((prev) => ({
+                  ...prev,
+                  energyData: data.energyData,
+                  bpmData: data.bpmData,
+                  energyLevel: data.energyLevel,
+                  dynamicRange: data.dynamicRange,
+                  averageRms: data.averageRms,
+                  ...(data.bpmData?.bpm && prev.bpmSource !== "manual"
+                    ? { bpm: data.bpmData.bpm, bpmSource: "auto" as "auto" }
+                    : {})
+                }));
               }}
               maxSeconds={60}
             />
           </View>
 
-          {/* FORM */}
+          {/* FULL UNIFIED FORM */}
           <IdeaForm
-            initialRiff={initialRiff}
+            riff={formData}
             projects={projects}
-            onDirtyChange={(_dirty, currentRiff) => setFormData(currentRiff)}
+            onChange={useCallback((updates: Partial<Riff>) => {
+              setFormData((prev) => ({ ...prev, ...updates }));
+            }, [])}
           />
         </ScrollView>
 
@@ -299,15 +344,15 @@ export default function CreateRiff() {
               },
             ]}
           >
-            {saving ? (
+            {saving === "saving" ? (
               <>
                 <ActivityIndicator size="small" color={theme.primaryForeground} />
-                <Text style={{ color: theme.primaryForeground, fontWeight: "bold", fontSize: 16 }}>
+                <Text style={{ color: theme.primaryForeground, fontWeight: "600", fontSize: 16 }}>
                   {t("idea.saving")}
                 </Text>
               </>
             ) : (
-              <Text style={{ color: theme.primaryForeground, fontWeight: "bold", fontSize: 16 }}>
+              <Text style={{ color: theme.primaryForeground, fontWeight: "600", fontSize: 16 }}>
                 {t("idea.save_button")}
               </Text>
             )}
@@ -328,8 +373,10 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
   },
   coreSectionTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
+    fontFamily: "SpaceGrotesk_700Bold",
+    fontSize: 22,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
     marginBottom: 12,
   },
   stickyFooter: {
@@ -342,8 +389,8 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   button: {
-    padding: 16,
-    borderRadius: 10,
+    padding: 14,
+    borderRadius: 12,
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "center",
@@ -355,3 +402,4 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
 });
+

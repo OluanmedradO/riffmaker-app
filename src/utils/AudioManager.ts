@@ -1,4 +1,4 @@
-import { AudioPlayer, createAudioPlayer } from 'expo-audio';
+﻿import { AudioPlayer, createAudioPlayer } from 'expo-audio';
 
 class AudioPreviewManager {
   private currentUri: string | null = null;
@@ -95,3 +95,4 @@ class AudioPreviewManager {
 }
 
 export const PreviewPlayerManager = new AudioPreviewManager();
+

@@ -1,4 +1,4 @@
-type RetryOptions = {
+﻿type RetryOptions = {
   maxAttempts?: number;
   delayMs?: number;
   onRetry?: (attempt: number, error: any) => void;
@@ -35,3 +35,4 @@ export function isNetworkError(error: any): boolean {
     error?.code === "NETWORK_ERROR"
   );
 }
+

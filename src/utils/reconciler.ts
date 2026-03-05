@@ -1,5 +1,5 @@
-import * as FileSystem from "expo-file-system/legacy";
-import { getRiffs, saveRiffs } from "../storage/riffs";
+﻿import * as FileSystem from "expo-file-system/legacy";
+import { getRiffs, saveRiffs } from "@/src/data/storage/riffs";
 
 const RIFFS_DIR = `${FileSystem.documentDirectory ?? ""}riffs/`;
 
@@ -7,8 +7,8 @@ const RIFFS_DIR = `${FileSystem.documentDirectory ?? ""}riffs/`;
  * Reconciles AsyncStorage metadata with actual files on disk.
  * - Marks riffs as `corrupted: true` if their audio file is missing
  * - Normalizes stale audioUri paths
- * - Generates waveform fallback for riffs that are missing one
- * - Logs orphan files found on disk (does NOT auto-delete)
+ * - Gera waveform de fallback para riffs que estão sem
+ * - Remove arquivos órfãos no disco (limpeza de cache)
  *
  * Should be called with InteractionManager.runAfterInteractions to avoid blocking the UI.
  */
@@ -69,7 +69,7 @@ export async function reconcileStorage(): Promise<void> {
       await saveRiffs(updatedRiffs);
     }
 
-    // 3. Detect orphan files on disk (log only, do not auto-delete)
+    // 3. Detect orphan files on disk and safely delete them to free up space
     try {
       const dirInfo = await FileSystem.getInfoAsync(RIFFS_DIR);
       if (dirInfo.exists) {
@@ -77,7 +77,12 @@ export async function reconcileStorage(): Promise<void> {
         for (const filename of files) {
           const fullUri = `${RIFFS_DIR}${filename}`;
           if (!knownUris.has(fullUri)) {
-            console.warn(`[Reconciler] Orphan file detected: ${fullUri}`);
+            try {
+              await FileSystem.deleteAsync(fullUri, { idempotent: true });
+              console.log(`[Reconciler] Removed orphan file: ${fullUri}`);
+            } catch (delError) {
+              console.warn(`[Reconciler] Failed to remove orphan: ${fullUri}`, delError);
+            }
           }
         }
       }
@@ -88,3 +93,5 @@ export async function reconcileStorage(): Promise<void> {
     console.error("[Reconciler] Fatal error:", error);
   }
 }
+
+

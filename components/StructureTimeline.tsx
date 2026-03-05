@@ -1,7 +1,7 @@
-import React from "react";
+﻿import React from "react";
 import { Dimensions, Pressable, StyleSheet, Text, View } from "react-native";
-import { Marker } from "../src/types/riff";
-import { useTheme } from "./ThemeProvider";
+import { Marker } from "@/src/domain/types/riff";
+import { useTheme } from "@/src/shared/theme/ThemeProvider";
 
 type Props = {
   durationMs: number;
@@ -122,3 +122,4 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
 });
+

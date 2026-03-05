@@ -1,4 +1,4 @@
-import type { FeatureKey } from "../types/access";
+﻿import type { FeatureKey } from "@/src/domain/types/access";
 
 export const PRO_FEATURES = new Set<FeatureKey>([
   "voiceToMidi",
@@ -11,4 +11,7 @@ export const PRO_FEATURES = new Set<FeatureKey>([
   "projectExport",
   "advancedFilters",
   "stats",
+  "longRecordings",
+  "unlimitedProjects",
 ]);
+

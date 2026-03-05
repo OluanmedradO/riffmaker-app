@@ -1,4 +1,4 @@
-import { useTheme } from "@/components/ThemeProvider";
+﻿import { useTheme } from "@/src/shared/theme/ThemeProvider";
 import { useAccess } from "@/src/access/AccessProvider";
 import { useRouter } from "expo-router";
 import {
@@ -400,3 +400,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
 });
+
+

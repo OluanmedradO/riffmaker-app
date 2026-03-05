@@ -1,6 +1,6 @@
-import { useTheme } from "@/components/ThemeProvider";
+﻿import { useTheme } from "@/src/shared/theme/ThemeProvider";
 import { useTranslation } from "@/src/i18n";
-import { getRiffs } from "@/src/storage/riffs";
+import { getRiffs } from "@/src/data/storage/riffs";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Check, Crown, Export, Minus, Playlist, Repeat, X } from "phosphor-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -1021,3 +1021,4 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
 });
+

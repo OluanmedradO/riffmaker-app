@@ -1,7 +1,8 @@
-import { CustomTabBar } from "@/components/CustomTabBar";
-import { useTheme } from "@/components/ThemeProvider";
+﻿import { CustomTabBar } from "@/components/CustomTabBar";
+import { useTheme } from "@/src/shared/theme/ThemeProvider";
 import { Tabs } from "expo-router";
-import { ArrowsLeftRightIcon, FolderSimpleIcon, GearIcon, WaveformIcon } from "phosphor-react-native";
+import { FolderSimpleIcon, WaveformIcon } from "phosphor-react-native";
+
 export default function TabsLayout() {
   const theme = useTheme();
   return (
@@ -9,12 +10,13 @@ export default function TabsLayout() {
       tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
         headerShown: false,
+        sceneStyle: { backgroundColor: theme.background },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: "Idéias",
+          title: "Ideias",
           tabBarIcon: ({ color }) => (
             <WaveformIcon weight="regular" size={24} color={color} />
           ),
@@ -23,30 +25,21 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="projects"
         options={{
-          title: "Projetos",
+          title: "Músicas",
           tabBarIcon: ({ color }) => (
             <FolderSimpleIcon weight="regular" size={24} color={color} />
           ),
         }}
       />
-      <Tabs.Screen
-        name="compare"
-        options={{
-          title: "Comparar",
-          tabBarIcon: ({ color }) => (
-            <ArrowsLeftRightIcon weight="regular" size={24} color={color} />
-          ),
-        }}
-      />
+      {/* Settings hidden from tab bar — accessible via top-right header icon */}
       <Tabs.Screen
         name="settings"
         options={{
-          title: "Configurações",
-          tabBarIcon: ({ color }) => (
-            <GearIcon weight="regular" size={24} color={color} />
-          ),
+          href: null, // Hide from tab bar
         }}
       />
     </Tabs>
   );
 }
+
+

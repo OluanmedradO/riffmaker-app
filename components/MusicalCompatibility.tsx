@@ -1,5 +1,5 @@
-import { useTheme } from "@/components/ThemeProvider";
-import { Riff } from "@/src/types/riff";
+﻿import { useTheme } from "@/src/shared/theme/ThemeProvider";
+import { Riff } from "@/src/domain/types/riff";
 import { ArrowsHorizontal, CheckCircle, WarningCircle, XCircle } from "phosphor-react-native";
 import React, { useMemo } from "react";
 import { Text, View } from "react-native";
@@ -156,7 +156,7 @@ export function MusicalCompatibility({ currentRiff, otherRiffs }: Props) {
         </View>
       ) : (
         <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
-          Nenhuma ideia compatível encontrada na sua coleção.
+          Nenhuma idéia compatível encontrada na sua coleção.
         </Text>
       )}
 
@@ -171,3 +171,5 @@ export function MusicalCompatibility({ currentRiff, otherRiffs }: Props) {
     </View>
   );
 }
+
+
