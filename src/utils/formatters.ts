@@ -1,4 +1,4 @@
-import { TUNING_PRESETS } from "../constants/app";
+﻿import { TUNING_PRESETS } from "@/src/constants/app";
 
 export function formatTime(totalSeconds: number): string {
   if (!totalSeconds || isNaN(totalSeconds)) return "00:00";
@@ -57,3 +57,5 @@ export function truncateText(text: string, maxLength: number): string {
 export function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 }
+
+

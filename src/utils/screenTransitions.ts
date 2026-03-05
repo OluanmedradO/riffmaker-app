@@ -1,4 +1,4 @@
-/**
+﻿/**
  * screenTransitions.ts
  * 
  * Transition presets para usar no Stack.Screen options do Expo Router.
@@ -70,3 +70,4 @@ export const fadeScaleTransition = {
     };
   },
 };
+

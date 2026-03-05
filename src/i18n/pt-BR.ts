@@ -17,6 +17,14 @@ export default {
   "settings.privacy": "Política de Privacidade",
   "settings.version": "Versão",
   "settings.language": "Idioma",
+  "settings.subtitle": "Gerencie seu app e seus dados",
+  "settings.risk_zone": "Zona de Risco",
+  "settings.last_backup": "Último backup: {{date}}",
+  "settings.plan_free": "Plano Free",
+  "settings.plan_pro": "Plano PRO",
+  "settings.pro_hero": "Riff Maker PRO",
+  "settings.pro_desc": "Desbloqueie backup completo e recursos avançados",
+  "settings.pro_cta": "Conhecer PRO",
 
   // Clear modal
   "clear.title": "Deletar tudo?",
@@ -66,6 +74,10 @@ export default {
   // Home (index.tsx)
   "home.title": "Minhas Idéias",
   "home.favorites": "Favoritas",
+  "home.filters_and_sort": "Filtros & Ordenação",
+  "home.clear_filters": "Limpar",
+  "home.apply": "Aplicar",
+  "home.apply_filters_count": "Aplicar filtros ({{count}})",
   "home.favorites_count": "favoritas",
   "home.search_placeholder": "Buscar idéia...",
   "home.filter_projects": "Projetos",
@@ -194,6 +206,7 @@ export default {
   "pro.hero.desc": "Loop avançado • Combinação inteligente\nExportações profissionais • Organização por projeto",
   "pro.trust.cancel": "Cancele quando quiser",
   "pro.trust.no_ads": "Sem anúncios",
+  "pro.trust.store": "Cobrança pela {{store}}",
 
   "pro.feat.org.title": "Organização Inteligente",
   "pro.feat.org.item1": "Compatibilidade automática de ideias",
@@ -246,6 +259,12 @@ export default {
 
   "pro.header.title": "Riff Maker",
   "pro.header.subtitle": "Transforme ideias soltas em música estruturada.",
+
+  "energy.high": "Alta",
+  "energy.medium": "Média",
+  "energy.low": "Baixa",
+  "riff.favorite_add": "Adicionar aos favoritos",
+  "riff.favorite_remove": "Remover dos favoritos",
 
   // Remaining
   "layout.new_riff": "Novo riff",

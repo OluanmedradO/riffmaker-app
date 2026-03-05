@@ -1,6 +1,6 @@
-import * as FileSystem from "expo-file-system/legacy";
+﻿import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
-import { Riff } from "../types/riff";
+import { Riff } from "@/src/domain/types/riff";
 
 export async function exportRiffStructure(riff: Riff): Promise<void> {
   const content = [];
@@ -46,3 +46,4 @@ export async function exportRiffStructure(riff: Riff): Promise<void> {
     });
   }
 }
+

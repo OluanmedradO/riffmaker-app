@@ -1,5 +1,5 @@
-import type { AccessState, FeatureKey } from "../types/access";
-import { PRO_FEATURES } from "./features";
+﻿import type { AccessState, FeatureKey } from "@/src/domain/types/access";
+import { PRO_FEATURES } from "@/src/access/features";
 
 export function effectivePlan(access: AccessState) {
   if (access.role === "admin") return access.simulatePlan ?? "pro";
@@ -16,3 +16,4 @@ export function hasAccess(feature: FeatureKey, access: AccessState): boolean {
 
   return true;
 }
+

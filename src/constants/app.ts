@@ -1,4 +1,4 @@
-export const APP_CONFIG = {
+﻿export const APP_CONFIG = {
   MAX_RECORDING_SECONDS: 60,
   AUTOSAVE_DEBOUNCE_MS: 1000,
   MAX_RIFF_TITLE_LENGTH: 100,
@@ -38,3 +38,5 @@ export const SORT_OPTIONS = [
   { label: "Gênero (A-Z)", value: "genre-asc" },
   { label: "Gênero (Z-A)", value: "genre-desc" },
 ] as const;
+
+

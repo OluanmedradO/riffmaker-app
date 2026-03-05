@@ -1,4 +1,4 @@
-import React, {
+﻿import React, {
     createContext,
     useCallback,
     useContext,
@@ -6,9 +6,9 @@ import React, {
     useMemo,
     useState,
 } from "react";
-import type { AccessState, FeatureKey } from "../types/access";
-import { effectivePlan, hasAccess } from "./hasAccess";
-import { loadAccess, saveAccess } from "./storage";
+import type { AccessState, FeatureKey } from "@/src/domain/types/access";
+import { effectivePlan, hasAccess } from "@/src/access/hasAccess";
+import { loadAccess, saveAccess } from "@/src/access/storage";
 
 type AccessContextValue = {
   access: AccessState;
@@ -60,3 +60,4 @@ export function useAccess() {
   if (!ctx) throw new Error("useAccess must be used within AccessProvider");
   return ctx;
 }
+

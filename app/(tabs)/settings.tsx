@@ -1,34 +1,37 @@
-import { AnimatedHeaderTitle } from "@/components/AnimatedHeaderTitle";
-import { showToast } from "@/components/AppToast";
-import { Screen } from "@/components/Screen";
-import { useTheme } from "@/components/ThemeProvider";
-import { useProGate } from "@/src/hooks/useProGate";
-import { useSecretTap } from "@/src/hooks/useSecretTap";
+﻿import { showToast } from "@/src/shared/ui/AppToast";
+import { Screen } from "@/src/shared/ui/Screen";
+import { ScreenHeader } from "@/src/shared/ui/ScreenHeader";
+import { useTheme } from "@/src/shared/theme/ThemeProvider";
+import { useAccess } from "@/src/access/AccessProvider";
+import { useAlert } from "@/src/contexts/AlertContext";
+import { useProGate } from '@/src/shared/hooks/useProGate';
+import { useSecretTap } from "@/src/shared/hooks/useSecretTap";
 import { useTranslation } from "@/src/i18n";
 import { exportFullBackup, restoreFullBackup } from "@/src/utils/backup";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system/legacy";
 import { useRouter } from "expo-router";
 import {
-    CaretRight,
-    Crown,
-    DownloadSimple,
-    HourglassHigh,
-    Info,
-    ShieldCheck,
-    Trash
+  ArrowsClockwise,
+  CaretRight,
+  Crown,
+  DownloadSimple,
+  FileText,
+  HourglassHigh,
+  Info,
+  ShieldCheck,
+  Trash
 } from "phosphor-react-native";
 import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Modal,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Switch,
-    Text,
-    View,
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  View
 } from "react-native";
 
 export default function Settings() {
@@ -39,13 +42,27 @@ export default function Settings() {
   const [countdownEnabled, setCountdownEnabled] = useState(false);
   const [backupLoading, setBackupLoading] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState(false);
+  const [lastBackup, setLastBackup] = useState<string | null>(null);
   const requirePro = useProGate();
+  const { showAlert } = useAlert();
+  const { planEffective } = useAccess();
 
   useEffect(() => {
     AsyncStorage.getItem("@countdown_enabled").then((val) => {
       setCountdownEnabled(val === "true");
     });
-  }, []);
+    AsyncStorage.getItem("@last_full_backup").then((val) => {
+      if (val) {
+        const date = new Date(parseInt(val));
+        const formatted = new Intl.DateTimeFormat(language, { 
+          day: '2-digit', 
+          month: 'short', 
+          year: 'numeric' 
+        }).format(date);
+        setLastBackup(formatted);
+      }
+    });
+  }, [language]);
 
   async function handleToggleCountdown(value: boolean) {
     setCountdownEnabled(value);
@@ -63,17 +80,17 @@ export default function Settings() {
     try {
       await AsyncStorage.clear();
       setShowClearModal(false);
-      Alert.alert(t("settings.success_title"), t("settings.clear_success"));
+      showAlert(t("settings.success_title"), t("settings.clear_success"));
       router.back();
     } catch (error) {
-      Alert.alert(t("project.error"), t("settings.clear_error"));
+      showAlert(t("project.error"), t("settings.clear_error"));
     } finally {
       setClearing(false);
     }
   }
 
   function handlePrivacyPolicy() {
-    Alert.alert(
+    showAlert(
       t("settings.privacy_title"),
       t("settings.privacy_body"),
     );
@@ -83,7 +100,7 @@ export default function Settings() {
     try {
       await exportFullBackup();
     } catch (e) {
-      Alert.alert(t("project.error"), t("settings.export_error"));
+      showAlert(t("project.error"), t("settings.export_error"));
     }
   }
 
@@ -94,11 +111,18 @@ export default function Settings() {
       const result = await exportFullBackup();
       if (result.success) {
         showToast({ type: "success", message: result.message });
+        // Update local state for immediate feedback
+        const formatted = new Intl.DateTimeFormat(language, { 
+          day: '2-digit', 
+          month: 'short', 
+          year: 'numeric' 
+        }).format(new Date());
+        setLastBackup(formatted);
       } else {
-        Alert.alert(t("settings.backup_failed"), result.message);
+        showAlert(t("settings.backup_failed"), result.message);
       }
     } catch (e: any) {
-      Alert.alert(t("project.error"), e?.message ?? t("settings.export_error"));
+      showAlert(t("project.error"), e?.message ?? t("settings.export_error"));
     } finally {
       setBackupLoading(false);
     }
@@ -106,7 +130,7 @@ export default function Settings() {
 
   async function handleRestoreBackup() {
     if (requirePro("fullBackup", t("settings.pro_restore"))) return;
-    Alert.alert(
+    showAlert(
       t("settings.restore_backup_title"),
       t("settings.restore_backup_body"),
       [
@@ -128,7 +152,7 @@ export default function Settings() {
       // Use SAF to request read permission and pick JSON file
       const result = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
       if (!result.granted) {
-        Alert.alert(t("settings.permission_denied_title"), t("settings.permission_denied_body"));
+        showAlert(t("settings.permission_denied_title"), t("settings.permission_denied_body"));
         return;
       }
 
@@ -137,7 +161,7 @@ export default function Settings() {
       const backupFileUri = files.find((f) => f.endsWith("backup.json") || f.includes("riffmaker_backup"));
 
       if (!backupFileUri) {
-        Alert.alert(t("settings.file_not_found"), t("settings.file_not_found_body"));
+        showAlert(t("settings.file_not_found"), t("settings.file_not_found_body"));
         return;
       }
 
@@ -150,10 +174,10 @@ export default function Settings() {
       if (restoreResult.success) {
         showToast({ type: "success", message: restoreResult.message });
       } else {
-        Alert.alert(t("settings.restore_failed"), restoreResult.message);
+        showAlert(t("settings.restore_failed"), restoreResult.message);
       }
     } catch (e: any) {
-      Alert.alert(t("project.error"), e?.message ?? t("settings.restore_error"));
+      showAlert(t("project.error"), e?.message ?? t("settings.restore_error"));
     } finally {
       setRestoreLoading(false);
     }
@@ -167,156 +191,191 @@ export default function Settings() {
 
   return (
     <Screen background={theme.background}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
       <Pressable onPress={handleSecretTap}>
-        <AnimatedHeaderTitle
+        <ScreenHeader
           title={t("settings.title")}
-          fontSize={24}
-          fontWeight="900"
-          style={{ marginTop: 16, marginBottom: 8 }}
+          subtitle={t("settings.subtitle")}
+          rightSlot={
+            <View style={[styles.planBadge, { backgroundColor: planEffective === 'pro' ? theme.proPurple + '20' : theme.input, borderColor: planEffective === 'pro' ? theme.proPurple + '40' : theme.border }]}>
+              <Text style={{ fontSize: 10, fontWeight: "900", color: planEffective === 'pro' ? theme.proPurple : theme.mutedForeground, letterSpacing: 0.5 }}>
+                {(planEffective === 'pro' ? t("settings.plan_pro") : t("settings.plan_free")).toUpperCase()}
+              </Text>
+            </View>
+          }
+          style={{ paddingHorizontal: 0, paddingTop: 16 }}
         />
       </Pressable>
 
-      <Text
-        style={[
-          styles.sectionTitle,
-          { color: theme.mutedForeground, marginTop: 24 },
-        ]}
-      >
-        {t("settings.recording")}
-      </Text>
-
-      <View style={[styles.item, { backgroundColor: theme.card }]}>
-        <HourglassHigh size={20} color={theme.foreground} weight="regular" />
-        <Text style={[styles.itemText, { color: theme.foreground }]}>
-          {t("settings.countdown")}
-        </Text>
-        <Switch
-          value={countdownEnabled}
-          onValueChange={handleToggleCountdown}
-          trackColor={{ false: theme.border, true: theme.primary }}
-        />
-      </View>
-
-      <Text
-        style={[
-          styles.sectionTitle,
-          { color: theme.mutedForeground, marginTop: 24 },
-        ]}
-      >
-        {t("settings.backup_data")}
-      </Text>
-
-      {/* Export Metadata (legacy) */}
-      <Pressable
-        onPress={handleExportData}
-        style={[styles.item, { backgroundColor: theme.card }]}
-      >
-        <DownloadSimple size={20} color={theme.foreground} weight="regular" />
-        <Text style={[styles.itemText, { color: theme.foreground }]}>
-          {t("settings.export_json")}
-        </Text>
-        <CaretRight size={16} color={theme.mutedForeground} weight="bold" />
-      </Pressable>
-
-      {/* Full Backup */}
-      <Pressable
-        onPress={handleExportFullBackup}
-        disabled={backupLoading}
-        style={[styles.item, { backgroundColor: theme.card }]}
-      >
-        <Crown size={20} color={theme.proPurple} weight="fill" />
-        <Text style={[styles.itemText, { color: theme.foreground }]}>
-          {backupLoading ? t("settings.exporting") : t("settings.export_full")}
-        </Text>
-        {backupLoading ? (
-          <ActivityIndicator size="small" color={theme.primary} />
-        ) : (
-          <CaretRight size={16} color={theme.mutedForeground} weight="bold" />
+      <View style={{ paddingHorizontal: 20 }}>
+        {/* PRO Banner - Premium Redesign */}
+        {planEffective === 'free' && (
+          <Pressable
+            onPress={() => router.push("/pro")}
+            style={({ pressed }) => [
+              styles.proCard,
+              { 
+                backgroundColor: theme.proPurple + "15",
+                borderColor: theme.proPurple + "30",
+                transform: [{ scale: pressed ? 0.98 : 1 }]
+              }
+            ]}
+          >
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                <Crown size={22} color={theme.proPurple} weight="fill" />
+                <Text style={{ fontSize: 18, fontWeight: "900", color: theme.foreground }}>{t("settings.pro_hero")}</Text>
+              </View>
+              <Text style={{ fontSize: 14, color: theme.mutedForeground, lineHeight: 20 }}>
+                {t("settings.pro_desc")}
+              </Text>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <Text style={{ color: theme.proPurple, fontSize: 14, fontWeight: "800" }}>{t("settings.pro_cta")}</Text>
+              <CaretRight size={16} color={theme.proPurple} weight="bold" />
+            </View>
+          </Pressable>
         )}
-      </Pressable>
 
-      {/* Restore Backup */}
-      <Pressable
-        onPress={handleRestoreBackup}
-        disabled={restoreLoading}
-        style={[styles.item, { backgroundColor: theme.card }]}
-      >
-        <Crown size={20} color={theme.proPurple} weight="fill" />
-        <Text style={[styles.itemText, { color: theme.foreground }]}>
-          {restoreLoading ? t("settings.restoring") : t("settings.restore_backup")}
+        <Text style={[styles.sectionTitle, { color: theme.mutedForeground }]}>
+          {t("settings.recording")}
         </Text>
-        {restoreLoading ? (
-          <ActivityIndicator size="small" color={theme.primary} />
-        ) : (
+
+        <View style={[styles.item, { backgroundColor: theme.card }]}>
+          <HourglassHigh size={20} color={theme.foreground} weight="regular" style={{ opacity: 0.7 }} />
+          <Text style={[styles.itemText, { color: theme.foreground }]}>
+            {t("settings.countdown")}
+          </Text>
+          <Switch
+            value={countdownEnabled}
+            onValueChange={handleToggleCountdown}
+            trackColor={{ false: theme.border, true: theme.primary }}
+          />
+        </View>
+
+        <Text style={[styles.sectionTitle, { color: theme.mutedForeground, marginTop: 32 }]}>
+           {t("settings.backup_data")}
+          {lastBackup && (
+            <Text style={{ fontSize: 11, textTransform: 'none', fontWeight: '400', letterSpacing: 0 }}>
+              {"  "}· {t("settings.last_backup", { date: lastBackup })}
+            </Text>
+          )}
+        </Text>
+
+        {/* Export Metadata */}
+        <Pressable
+          onPress={handleExportData}
+          style={({ pressed }) => [styles.item, { backgroundColor: theme.card, opacity: pressed ? 0.7 : 1 }]}
+        >
+          <FileText size={20} color={theme.foreground} weight="regular" style={{ opacity: 0.7 }} />
+          <Text style={[styles.itemText, { color: theme.foreground }]}>
+            {t("settings.export_json")} (Metadata)
+          </Text>
           <CaretRight size={16} color={theme.mutedForeground} weight="bold" />
-        )}
-      </Pressable>
+        </Pressable>
 
-      <Pressable
-        onPress={handleClearData}
-        disabled={clearing}
-        style={[styles.item, { backgroundColor: theme.card }]}
-      >
-        <Trash size={20} color={theme.destructive} weight="fill" />
-        <Text style={[styles.itemText, { color: theme.destructive, fontWeight: "bold" }]}>
-          {clearing ? t("settings.clearing") : t("settings.clear_all")}
-        </Text>
-      </Pressable>
+        {/* Full Backup */}
+        <Pressable
+          onPress={handleExportFullBackup}
+          disabled={backupLoading}
+          style={({ pressed }) => [styles.item, { backgroundColor: theme.card, opacity: pressed ? 0.7 : 1 }]}
+        >
+          <DownloadSimple size={20} color={theme.foreground} weight="regular" style={{ opacity: 0.7 }} />
+          <Text style={[styles.itemText, { color: theme.foreground }]}>
+            {backupLoading ? t("settings.exporting") : t("settings.export_full")}
+          </Text>
+          {backupLoading ? (
+            <ActivityIndicator size="small" color={theme.primary} />
+          ) : (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+               {planEffective === 'free' && <Crown size={14} color={theme.proPurple} weight="fill" />}
+               <CaretRight size={16} color={theme.mutedForeground} weight="bold" />
+            </View>
+          )}
+        </Pressable>
 
-      <Text style={[styles.sectionTitle, { color: theme.mutedForeground }]}>
-        {t("settings.info")}
-      </Text>
+        {/* Restore Backup */}
+        <Pressable
+          onPress={handleRestoreBackup}
+          disabled={restoreLoading}
+          style={({ pressed }) => [styles.item, { backgroundColor: theme.card, opacity: pressed ? 0.7 : 1 }]}
+        >
+          <ArrowsClockwise size={20} color={theme.foreground} weight="regular" style={{ opacity: 0.7 }} />
+          <Text style={[styles.itemText, { color: theme.foreground }]}>
+            {restoreLoading ? t("settings.restoring") : t("settings.restore_backup")}
+          </Text>
+          {restoreLoading ? (
+            <ActivityIndicator size="small" color={theme.primary} />
+          ) : (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+               {planEffective === 'free' && <Crown size={14} color={theme.proPurple} weight="fill" />}
+               <CaretRight size={16} color={theme.mutedForeground} weight="bold" />
+            </View>
+          )}
+        </Pressable>
 
-      {/* Language */}
-      <Pressable
-        onPress={toggleLanguage}
-        style={[styles.item, { backgroundColor: theme.card }]}
-      >
-        <Text style={[styles.itemText, { color: theme.foreground }]}>
-          {t("settings.language")}
+        <Text style={[styles.sectionTitle, { color: theme.mutedForeground, marginTop: 32 }]}>
+          {t("settings.info")}
         </Text>
-        <Text style={{ color: theme.primary, fontWeight: "bold" }}>
-          {language === "pt-BR" ? "Português" : "English"}
-        </Text>
-      </Pressable>
 
-      {/* PRO Banner */}
-      <Pressable
-        onPress={() => router.push("/pro")}
-        style={[styles.item, {
-          backgroundColor: theme.proPurple + "12",
-          borderWidth: 1,
-          borderColor: theme.proPurple + "30",
-        }]}
-      >
-        <Crown size={20} color={theme.proPurple} weight="fill" />
-        <Text style={[styles.itemText, { color: theme.foreground, fontWeight: "bold" }]}>
-          {t("settings.pro")}
-        </Text>
-        <Text style={{ color: theme.proPurple, fontSize: 13, fontWeight: "bold" }}>{t("settings.view")}</Text>
-        <CaretRight size={16} color={theme.proPurple} weight="bold" />
-      </Pressable>
+        {/* Language */}
+        <Pressable
+          onPress={toggleLanguage}
+          style={({ pressed }) => [styles.item, { backgroundColor: theme.card, opacity: pressed ? 0.7 : 1 }]}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.itemText, { color: theme.foreground }]}>
+              {t("settings.language")}
+            </Text>
+            <Text style={{ color: theme.mutedForeground, fontSize: 12, marginTop: 2 }}>
+              {language === "pt-BR" ? "Português (Brasil)" : "English (US)"}
+            </Text>
+          </View>
+          <CaretRight size={16} color={theme.mutedForeground} weight="bold" />
+        </Pressable>
 
-      <Pressable
-        onPress={handlePrivacyPolicy}
-        style={[styles.item, { backgroundColor: theme.card }]}
-      >
-        <ShieldCheck size={20} color={theme.foreground} weight="regular" />
-        <Text style={[styles.itemText, { color: theme.foreground }]}>
-          {t("settings.privacy")}
-        </Text>
-        <CaretRight size={16} color={theme.mutedForeground} weight="bold" />
-      </Pressable>
+        <Pressable
+          onPress={handlePrivacyPolicy}
+          style={({ pressed }) => [styles.item, { backgroundColor: theme.card, opacity: pressed ? 0.7 : 1 }]}
+        >
+          <ShieldCheck size={20} color={theme.foreground} weight="regular" style={{ opacity: 0.7 }} />
+          <Text style={[styles.itemText, { color: theme.foreground }]}>
+            {t("settings.privacy")}
+          </Text>
+          <CaretRight size={16} color={theme.mutedForeground} weight="bold" />
+        </Pressable>
 
-      <View style={[styles.item, { backgroundColor: theme.card }]}>
-        <Info size={20} color={theme.foreground} weight="regular" />
-        <Text style={[styles.itemText, { color: theme.foreground }]}>
-          {t("settings.version")}
+        <View style={[styles.item, { backgroundColor: theme.card }]}>
+          <Info size={20} color={theme.foreground} weight="regular" style={{ opacity: 0.7 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.itemText, { color: theme.foreground }]}>
+              {t("settings.version")}
+            </Text>
+            <Text style={{ color: theme.mutedForeground, fontSize: 12, marginTop: 2 }}>
+              v1.0.0 (Build 23)
+            </Text>
+          </View>
+        </View>
+
+        <Text style={[styles.sectionTitle, { color: theme.destructive, marginTop: 40 }]}>
+          {t("settings.risk_zone")}
         </Text>
-        <Text style={[styles.versionText, { color: theme.mutedForeground }]}>
-          1.0.0
-        </Text>
+        
+        <Pressable
+          onPress={handleClearData}
+          disabled={clearing}
+          style={({ pressed }) => [
+            styles.item, 
+            { backgroundColor: theme.destructive + "10", borderColor: theme.destructive + "30", borderWidth: 1, opacity: pressed ? 0.7 : 1 }
+          ]}
+        >
+          <Trash size={20} color={theme.destructive} weight="fill" />
+          <Text style={[styles.itemText, { color: theme.destructive, fontWeight: "bold" }]}>
+            {clearing ? t("settings.clearing") : t("settings.clear_all")}
+          </Text>
+        </Pressable>
+
+        <View style={{ height: 40 }} />
       </View>
 
       {/* CLEAR DATA MODAL */}
@@ -363,24 +422,43 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginBottom: 8,
   },
+  planBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  proCard: {
+    padding: 20,
+    borderRadius: 24,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 32,
+    marginTop: 8,
+  },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: "bold",
-    marginTop: 24,
-    marginBottom: 12,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 16,
     paddingHorizontal: 4,
   },
   item: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    marginBottom: 10,
     gap: 12,
   },
   itemText: {
     flex: 1,
     fontSize: 15,
+    fontWeight: "600",
   },
   versionText: {
     fontSize: 14,
@@ -398,3 +476,5 @@ const styles = StyleSheet.create({
     maxWidth: 400,
   },
 });
+
+

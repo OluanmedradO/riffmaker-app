@@ -1,7 +1,7 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+﻿import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
-import enUS from "./en-US";
-import ptBR from "./pt-BR";
+import enUS from "@/src/i18n/en-US";
+import ptBR from "@/src/i18n/pt-BR";
 
 export type Language = "pt-BR" | "en-US";
 
@@ -64,3 +64,4 @@ export function useTranslation() {
   }
   return context;
 }
+
