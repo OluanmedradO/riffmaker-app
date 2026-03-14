@@ -2,7 +2,10 @@
   "expo": {
     "name": "Riff Maker",
     "slug": "riffmaker",
-    "version": "1.2.0",
+    "version": "1.4.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "riffmaker",
@@ -25,6 +28,7 @@
       "permissions": [
         "RECORD_AUDIO"
       ],
+      "playStoreUrl": "https://play.google.com/store/apps/details?id=com.oluanmedrado.riffmaker",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#991c1c"
@@ -33,6 +37,10 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.oluanmedrado.riffmaker",
       "versionCode": 1
+    },
+    "updates": {
+      "url": "https://u.expo.dev/59165de5-350e-4516-ab1f-f51f5b202075",
+      "checkAutomatically": "ON_LOAD"
     },
     "web": {
       "bundler": "metro",
@@ -43,7 +51,8 @@
       "expo-router",
       "expo-audio",
       "expo-asset",
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true

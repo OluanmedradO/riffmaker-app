@@ -1,67 +1,71 @@
-import { ToastProvider } from "@/src/shared/ui/AppToast";
+﻿import { AccessProvider } from "@/src/access/AccessProvider";
+import { AlertProvider } from "@/src/contexts/AlertContext";
+import { migrateLegacyAsyncStorageIfNeeded } from "@/src/data/storage/migrateLegacy";
+import { applyMigrations } from "@/src/data/storage/migrations";
+import { I18nProvider } from "@/src/i18n";
+import { preloadLatestUpdateAsync } from "@/src/lib/appUpdates";
+import {
+  initializeObservability,
+  ObservabilityNavigationTracker,
+  reportError,
+} from "@/src/lib/observability";
 import { ThemeProvider, useTheme } from "@/src/shared/theme/ThemeProvider";
+import { ToastProvider } from "@/src/shared/ui/AppToast";
+import { BackgroundAtmosphere } from "@/src/shared/ui/BackgroundAtmosphere";
 import { CustomAlert } from "@/src/shared/ui/CustomAlert";
 import { ErrorBoundary } from "@/src/shared/ui/ErrorBoundary";
-import { AccessProvider } from "@/src/access/AccessProvider";
-import { AlertProvider } from "@/src/contexts/AlertContext";
-import { I18nProvider } from "@/src/i18n";
-import { migrateLegacyAsyncStorageIfNeeded } from '@/src/data/storage/migrateLegacy';
-import { applyMigrations } from '@/src/data/storage/migrations';
+import { GrainOverlay } from "@/src/shared/ui/GrainOverlay";
+import { Vignette } from "@/src/shared/ui/Vignette";
 import { reconcileStorage } from "@/src/utils/reconciler";
-import { fadeScaleTransition, sheetTransition, slideTransition } from "@/src/utils/screenTransitions";
+import {
+  fadeScaleTransition,
+  sheetTransition,
+  slideTransition,
+} from "@/src/utils/screenTransitions";
+import {
+  DMSans_400Regular,
+  DMSans_500Medium,
+  DMSans_700Bold,
+} from "@expo-google-fonts/dm-sans";
+import {
+  SpaceMono_400Regular,
+  SpaceMono_700Bold,
+} from "@expo-google-fonts/space-mono";
+import {
+  Syne_400Regular,
+  Syne_600SemiBold,
+  Syne_700Bold,
+  Syne_800ExtraBold,
+} from "@expo-google-fonts/syne";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, InteractionManager, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, InteractionManager, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-const FONT_REGULAR = "SpaceGrotesk_400Regular";
-const FONT_MEDIUM = "SpaceGrotesk_500Medium";
-const FONT_BOLD = "SpaceGrotesk_700Bold";
+const FONT_REGULAR = "DMSans_400Regular";
+const FONT_MEDIUM = "DMSans_500Medium";
+const FONT_BOLD = "DMSans_700Bold";
 
-function resolveFontByWeight(style: unknown): string {
-  const flattened = StyleSheet.flatten(style) as { fontFamily?: string; fontWeight?: string | number } | undefined;
-  if (flattened?.fontFamily) return flattened.fontFamily;
-
-  const weightRaw = flattened?.fontWeight;
-  const weight =
-    typeof weightRaw === "number"
-      ? weightRaw
-      : typeof weightRaw === "string"
-        ? parseInt(weightRaw, 10)
-        : NaN;
-
-  if (weightRaw === "bold" || (!Number.isNaN(weight) && weight >= 700)) return FONT_BOLD;
-  if (!Number.isNaN(weight) && weight >= 500) return FONT_MEDIUM;
-  return FONT_REGULAR;
-}
-
-function withGlobalFont(style: unknown) {
-  return [{ fontFamily: resolveFontByWeight(style) }, style];
-}
-
-const ReactPatched = React as typeof React & { __riffTypographyPatched?: boolean };
-
-if (!ReactPatched.__riffTypographyPatched) {
-  ReactPatched.__riffTypographyPatched = true;
-  const createElementOriginal = React.createElement;
-
-  React.createElement = ((type: any, props: any, ...children: any[]) => {
-    if (type === Text || type === TextInput) {
-      return createElementOriginal(type, { ...props, style: withGlobalFont(props?.style) }, ...children);
-    }
-    return createElementOriginal(type, props, ...children);
-  }) as typeof React.createElement;
-}
 
 export default function RootLayout() {
   const [dbReady, setDbReady] = useState(false);
   const [fontsLoaded] = useFonts({
-    [FONT_REGULAR]: require("../assets/fonts/SpaceGrotesk-Regular.ttf"),
-    [FONT_MEDIUM]: require("../assets/fonts/SpaceGrotesk-Medium.ttf"),
-    [FONT_BOLD]: require("../assets/fonts/SpaceGrotesk-Bold.ttf"),
+    [FONT_REGULAR]: DMSans_400Regular,
+    [FONT_MEDIUM]: DMSans_500Medium,
+    [FONT_BOLD]: DMSans_700Bold,
+    "Space Mono": SpaceMono_400Regular,
+    "Space Mono Bold": SpaceMono_700Bold,
+    Syne: Syne_400Regular,
+    "Syne SemiBold": Syne_600SemiBold,
+    "Syne Bold": Syne_700Bold,
+    "Syne ExtraBold": Syne_800ExtraBold,
   });
+
+  useEffect(() => {
+    initializeObservability();
+  }, []);
 
   useEffect(() => {
     async function initDB() {
@@ -70,6 +74,7 @@ export default function RootLayout() {
         await migrateLegacyAsyncStorageIfNeeded();
       } catch (e) {
         console.error("Migration error:", e);
+        reportError(e, { scope: "db-migrations" });
       } finally {
         setDbReady(true);
       }
@@ -82,9 +87,24 @@ export default function RootLayout() {
     return () => task.cancel();
   }, []);
 
+  useEffect(() => {
+    if (!dbReady || !fontsLoaded) {
+      return;
+    }
+
+    void preloadLatestUpdateAsync();
+  }, [dbReady, fontsLoaded]);
+
   if (!dbReady || !fontsLoaded) {
     return (
-      <View style={{ flex: 1, backgroundColor: "#000", justifyContent: "center", alignItems: "center" }}>
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: "#000",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
         <ActivityIndicator size="large" color="#FF3B30" />
       </View>
     );
@@ -95,14 +115,21 @@ export default function RootLayout() {
       <ThemeProvider>
         <AccessProvider>
           <SafeAreaProvider>
-            <GestureHandlerRootView style={{ flex: 1 }}>
+            <GestureHandlerRootView
+              style={{ flex: 1, backgroundColor: "#0a0a0b" }}
+            >
               <I18nProvider>
                 <AlertProvider>
                   <RootNavigation />
+                  <ObservabilityNavigationTracker />
                   <ToastProvider />
                   <CustomAlert />
                 </AlertProvider>
               </I18nProvider>
+              {/* Atmospheric layers rendered ABOVE screen content: pointer-events-none */}
+              <BackgroundAtmosphere />
+              <GrainOverlay opacity={0.15} />
+              <Vignette opacity={0.24} />
             </GestureHandlerRootView>
           </SafeAreaProvider>
         </AccessProvider>
@@ -115,7 +142,9 @@ function RootNavigation() {
   const theme = useTheme();
 
   return (
-    <Stack screenOptions={{ contentStyle: { backgroundColor: theme.background } }}>
+    <Stack
+      screenOptions={{ contentStyle: { backgroundColor: theme.background } }}
+    >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
       {/* Modal (sheet) */}
@@ -130,7 +159,7 @@ function RootNavigation() {
         options={{ ...slideTransition, title: "Editar riff" }}
       />
 
-      {/* Opcional: project/[id] também costuma ser slide */}
+      {/* Opcional: project/[id] tambÃ©m costuma ser slide */}
       <Stack.Screen
         name="project/[id]"
         options={{ ...slideTransition, title: "Projeto" }}
@@ -141,10 +170,13 @@ function RootNavigation() {
         name="pro"
         options={{ ...fadeScaleTransition, headerShown: false }}
       />
-      <Stack.Screen
-        name="dev"
-        options={{ ...fadeScaleTransition, headerShown: false }}
-      />
+      {__DEV__ && (
+        <Stack.Screen
+          name="dev"
+          options={{ ...fadeScaleTransition, headerShown: false }}
+        />
+      )}
     </Stack>
   );
 }
+

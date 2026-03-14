@@ -1,84 +1,61 @@
-# Política de Privacidade - Riff Maker
+# Privacy Policy - Riff Maker
 
-**Última atualização: Fevereiro de 2026**
+Last updated: March 13, 2026
 
-## 1. Introdução
+## Overview
 
-O Riff Maker ("nós", "nosso" ou "aplicativo") respeita sua privacidade e está comprometido em proteger seus dados pessoais. Esta política de privacidade explica como coletamos, usamos e protegemos suas informações.
+Riff Maker is designed to work without an account and stores your creative data locally on your device by default. Depending on how a release is configured, the app can also send technical diagnostics and product analytics to third-party processors used for monitoring, analytics, and over-the-air updates.
 
-## 2. Dados Coletados
+## 1. Data stored locally
 
-### 2.1 Dados Armazenados Localmente
+Riff Maker stores the following content locally on your device:
 
-O Riff Maker armazena todos os seus dados **localmente no seu dispositivo**:
+- riffs, project names, notes, BPM, tunings, and tags
+- audio recordings created inside the app
+- backup files you choose to export or restore
+- app preferences such as language and recording options
 
-- **Riffs criados**: Títulos, BPM, afinações, notas e gravações de áudio
-- **Configurações do aplicativo**: Preferências de tema e ordenação
-- **Dados de uso**: Para melhorar a experiência do usuário
+You do not need to create an account to use the app.
 
-### 2.2 Dados NÃO Coletados
+## 2. Technical data that may be sent
 
-**Nós NÃO coletamos, armazenamos ou compartilhamos:**
+When the integrations are configured for a release, the app may send limited technical data to the services below:
 
-- Informações pessoais identificáveis
-- Dados de localização
-- Contatos ou calendário
-- Informações de dispositivos
-- Dados de terceiros
+- Sentry: crash reports, stack traces, release/build metadata, and runtime diagnostics
+- PostHog: product analytics events such as screen views, app version, build number, update channel, platform, and basic device/app metadata
+- Expo Updates: update identifiers, runtime version, and channel information required to deliver compatible OTA updates
 
-## 3. Permissões do Aplicativo
+This information is used to improve reliability, understand usage, and ship safer releases. We do not sell your riffs, recordings, or personal data.
 
-### 3.1 Microfone
+## 3. Permissions
 
-O Riff Maker solicita acesso ao microfone **apenas** para gravar áudio dos seus riffs. Você pode negar essa permissão - o aplicativo funcionará normalmente, exceto pela funcionalidade de gravação.
+Riff Maker may request:
 
-**Como usamos:**
-- Gravar áudio quando você pressiona o botão "Gravar"
-- O áudio é salvo localmente no seu dispositivo
-- Nunca enviamos gravações para servidores externos
+- Microphone access, only when you start a recording
+- File access/sharing permissions when you export, import, or share backups and audio files
 
-### 3.2 Armazenamento
+## 4. Third-party processors
 
-Usado para salvar seus riffs e configurações localmente no dispositivo.
+Depending on the build configuration, the app may use:
 
-## 4. Compartilhamento de Dados
+- Expo / EAS Update for app delivery and OTA updates
+- Sentry for crash and error monitoring
+- PostHog for product analytics
 
-**Seus dados NÃO são compartilhados com terceiros.** Tudo permanece no seu dispositivo.
+If the related credentials are not configured, those services remain disabled.
 
-## 5. Segurança
+## 5. Your controls
 
-Implementamos medidas de segurança para proteger seus dados:
+You can:
 
-- Armazenamento criptografado (AsyncStorage)
-- Sem transmissão de dados pela internet
-- Sem rastreamento ou analytics invasivos
+- delete your content inside the app
+- export backups of your data
+- uninstall the app to remove locally stored content from the device
 
-## 6. Seus Direitos
+## 6. Children
 
-Como seus dados ficam apenas no seu dispositivo, você tem controle total:
+Riff Maker is not designed to intentionally collect personal data from children.
 
-- **Exportar**: Faça backup dos seus riffs (em desenvolvimento)
-- **Deletar**: Remova riffs a qualquer momento
-- **Limpar**: Desinstale o app para remover todos os dados
+## 7. Contact
 
-## 7. Menores de Idade
-
-O Riff Maker pode ser usado por pessoas de todas as idades. Não coletamos dados de menores intencionalmente.
-
-## 8. Alterações nesta Política
-
-Podemos atualizar esta política ocasionalmente. Notificaremos sobre mudanças significativas através do aplicativo.
-
-## 9. Contato
-
-Para dúvidas sobre privacidade:
-- Email: [seu-email@exemplo.com]
-- GitHub: [seu-usuario/riffmaker-app]
-
----
-
-**Resumo Simples:**
-✅ Seus riffs ficam no seu celular
-✅ Não vendemos ou compartilhamos seus dados
-✅ Microfone usado apenas para gravar quando você escolhe
-✅ Você tem controle total sobre seus dados
+Before public release, publish an official support email or support page in the store listing and mirror it here.
